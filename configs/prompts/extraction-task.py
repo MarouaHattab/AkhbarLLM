@@ -2,7 +2,9 @@ import json
 from typing import List, Dict
 from src.entites.ExtractedNews import NewsDetails
 def build_extraction_prompt(story: str) -> List[Dict]:
-  
+    if not isinstance(story, str) or not story.strip():
+        raise ValueError("Story is empty or None")
+
     messages =[
         {
             "role": "system",

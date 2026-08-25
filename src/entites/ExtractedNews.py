@@ -31,14 +31,14 @@ class NewsDetails(BaseModel):
 
     story_keywords: List[str] = Field(
         ...,
-        min_items=1,
+        min_length=1,
         description="Relevant keywords associated with the story."
     )
 
     story_summary: List[str] = Field(
         ...,
-        min_items=1,
-        max_items=5,
+        min_length=1,
+        max_length=5,
         description="Summarized key points about the story (1-5 points)."
     )
 
@@ -51,7 +51,7 @@ class NewsDetails(BaseModel):
 
     story_entities: List[Entity] = Field(
         ...,
-        min_items=1,
-        max_items=10,
+        min_length=1,
+        max_length=10,
         description="List of identified entities in the story."
     )

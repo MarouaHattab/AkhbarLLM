@@ -3,20 +3,32 @@ import json
 
 from src.entites.TranslatedStory import TranslatedStory
 
-def build_translation_prompt(story: str, target_language: str = "ar") -> List[Dict]:
-    source_language = "english"
-    if target_language in ["en", "english"]:    
-        target_language = "English"
-    elif target_language in ["ar", "arabic"]:
-        target_language = "Arabic"
+LANGUAGE_ALIASES = {
+    "en": "English",
+    "english": "English",
+    "ar": "Arabic",
+    "arabic": "Arabic",
+}
 
-    if story is None or story.strip() == "":    
+
+def normalize_language(language: str, field_name: str) -> str:
+    if not isinstance(language, str) or not language.strip():
+        raise ValueError(f"{field_name} is empty or None")
+
+    normalized = language.strip()
+    return LANGUAGE_ALIASES.get(normalized.casefold(), normalized)
+
+
+def build_translation_prompt(
+    story: str,
+    target_language: str = "ar",
+    source_language: str = "english",
+) -> List[Dict]:
+    if not isinstance(story, str) or not story.strip():
         raise ValueError("Story is empty or None")
-    
-    if target_language is None or target_language.strip() == "":
-        raise ValueError("Target language is empty or None")
-    
-    target_language = target_language.strip().lower()
+
+    source_language = normalize_language(source_language, "Source language")
+    target_language = normalize_language(target_language, "Target language")
    
     messages =[
     {
