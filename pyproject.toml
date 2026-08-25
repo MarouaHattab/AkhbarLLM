@@ -1,0 +1,21 @@
+[project]
+name = "news-finetuning"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+serve = [
+    "vllm==0.7.2 ; sys_platform == 'linux'",
+]
+train = [
+    "datasets==3.2.0",
+    "faker==35.2.0",
+    "json-repair==0.29.1",
+    "openai==1.61.0",
+    "optimum==1.24.0",
+    "transformers==4.48.3",
+    "wandb>=0.28.2",
+]
