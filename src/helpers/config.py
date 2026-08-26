@@ -9,6 +9,9 @@ MODEL_CACHE_DIR = PROJECT_ROOT / ".hf-cache" / "hub"
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_PATH = DATA_DIR / "raw" / "news-sample.jsonl"
 DISTILLATION_OUTPUT_PATH = DATA_DIR / "datasets" / "sft.jsonl"
+LLAMA_FACTORY_OUTPUT_PATH = DATA_DIR / "datasets" / "llama_factory.json"
+LLAMA_FACTORY_DATASET_INFO_PATH = DATA_DIR / "datasets" / "dataset_info.json"
+FINETUNING_FORMAT_SHUFFLE_SEED = 101
 
 QWEN_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 QWEN_MAX_NEW_TOKENS = 1024

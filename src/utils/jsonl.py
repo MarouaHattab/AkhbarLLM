@@ -23,3 +23,12 @@ def append_jsonl(path: str | Path, record: dict[str, Any]) -> None:
         destination.write(
             json.dumps(record, ensure_ascii=False, default=str) + "\n"
         )
+
+
+def write_json(path: str | Path, value: Any) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(value, ensure_ascii=False, default=str, indent=2),
+        encoding="utf-8",
+    )

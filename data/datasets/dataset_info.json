@@ -1,0 +1,12 @@
+{
+  "news_finetuning": {
+    "file_name": "llama_factory.json",
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output",
+      "system": "system",
+      "history": "history"
+    }
+  }
+}
