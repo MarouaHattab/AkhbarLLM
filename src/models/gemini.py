@@ -4,6 +4,7 @@ from typing import Any
 from src.helpers.config import (
     GEMINI_MAX_OUTPUT_TOKENS,
     GEMINI_MODEL_ID,
+    GEMINI_RESPONSE_MIME_TYPE,
     GEMINI_TEMPERATURE,
 )
 from src.models.language_model import ChatMessage
@@ -44,6 +45,7 @@ class GeminiModel:
             system_instruction=system_instruction,
             max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
             temperature=GEMINI_TEMPERATURE,
+            response_mime_type=GEMINI_RESPONSE_MIME_TYPE,
         )
 
         try:

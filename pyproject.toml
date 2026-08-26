@@ -19,6 +19,7 @@ evaluation = [
     "google-api-core>=2.34,<3,!=2.35.0",
     "google-genai>=1.0,<2",
     "huggingface-hub>=0.36.0,<2",
+    "openai>=1.61,<2",
     "torch>=2.5.1",
     "transformers==4.48.3",
 ]

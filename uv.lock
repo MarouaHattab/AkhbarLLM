@@ -975,6 +975,7 @@ evaluation = [
     { name = "google-api-core" },
     { name = "google-genai" },
     { name = "huggingface-hub" },
+    { name = "openai" },
     { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
     { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
     { name = "transformers" },
@@ -1004,6 +1005,7 @@ evaluation = [
     { name = "google-api-core", specifier = ">=2.34,!=2.35.0,<3" },
     { name = "google-genai", specifier = ">=1.0,<2" },
     { name = "huggingface-hub", specifier = ">=0.36.0,<2" },
+    { name = "openai", specifier = ">=1.61,<2" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "transformers", specifier = "==4.48.3" },
 ]

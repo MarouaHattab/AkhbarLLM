@@ -21,24 +21,24 @@ QWEN_DEVICE_MAP = "auto"
 
 GEMINI_MODEL_ID = "gemini-3.1-flash-lite"
 GEMINI_MAX_OUTPUT_TOKENS = 1024
-GEMINI_TEMPERATURE = 0.0
+GEMINI_TEMPERATURE = 0.2
+GEMINI_RESPONSE_MIME_TYPE = "application/json"
+
+OPENAI_MODEL_ID = "gpt-4o-mini"
+OPENAI_TEMPERATURE = 0.2
+OPENAI_RESPONSE_FORMAT = {"type": "json_object"}
 
 # Backward-compatible name used by existing training code.
 BASE_MODEL_ID = QWEN_MODEL_ID
 
 
 def qwen_generation_kwargs() -> dict[str, Any]:
-    settings = {
+    return {
         "max_new_tokens": QWEN_MAX_NEW_TOKENS,
         "do_sample": QWEN_DO_SAMPLE,
         "temperature": QWEN_TEMPERATURE,
         "top_p": QWEN_TOP_P,
         "top_k": QWEN_TOP_K,
-    }
-    return {
-        name: value
-        for name, value in settings.items()
-        if value is not None
     }
 
 

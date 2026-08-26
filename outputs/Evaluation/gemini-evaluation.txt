@@ -1,0 +1,43 @@
+﻿
+=== GEMINI | gemini-3.1-flash-lite | EXTRACTION ===
+{
+  "story_title": "تأثير العائلة على تشكيل الشخصية المالية للأفراد",
+  "story_keywords": [
+    "الشخصية المالية",
+    "التربية المالية",
+    "فوربس",
+    "الجينوم المالي",
+    "السلوك المالي"
+  ],
+  "story_summary": [
+    "تلعب العائلة دورا محوريا في تشكيل علاقة الأفراد بالمال من خلال أنماط السلوك المتوارثة.",
+    "تتحدد الشخصية المالية وفق ثلاثة أبعاد رئيسية: الاكتساب، الاستخدام، والإدارة.",
+    "تؤثر تجارب الطفولة والتربية الأسرية بشكل مباشر على كيفية تعامل البالغين مع المال.",
+    "تستخدم رابطة العلاج المالي أداة 'مخطط الجينوم المالي' لتحليل الأنماط المالية داخل العائلات."
+  ],
+  "story_category": "economy",
+  "story_entities": [
+    {
+      "entity_value": "فوربس",
+      "entity_type": "organization"
+    },
+    {
+      "entity_value": "شاين إنيت",
+      "entity_type": "person-male"
+    },
+    {
+      "entity_value": "رابطة العلاج المالي",
+      "entity_type": "organization"
+    }
+  ]
+}
+JSON valid: True
+Schema valid: True
+
+=== GEMINI | gemini-3.1-flash-lite | TRANSLATION ===
+{
+  "translated_title": "Forbes: How Family Shapes Our Financial Personality",
+  "translated_content": "Forbes magazine reported that family plays a pivotal role in shaping individuals' relationships with money, as this relationship is influenced by financial behavior patterns inherited across generations. The report, based on research by Professor Shane Enete on financial well-being, explains that every person has a 'financial personality' determined by how they interact with money, which is directly influenced by family upbringing and childhood experiences. According to the study, there are three main dimensions that shape our relationship with money: Acquisition (A): Individuals in this dimension tend to view money as a commodity to be accumulated, seeing wealth creation as an end in itself. The downside of this pattern is the potential for an obsession with wealth or, conversely, a complete rejection of acquiring money as a source of corruption. Usage (U): These individuals view money as a tool for enjoying life, linking its value to its ability to provide pleasure and comfort. However, some may become addicted to spending, while others turn to excessive austerity out of fear of the future. Management (M): Those with this pattern consider money a responsibility that requires careful planning. In some cases, however, this can turn into an excessive obsession with managing spending, which negatively affects personal relationships. How does family affect our relationship with money? The report indicates that family experiences play a major role in determining each individual's 'financial personality.' For example, if a parent relies on money as a reward for good behavior, the child may later adopt the same pattern in their adult life. To analyze these influences accurately, the Financial Therapy Association has developed a tool called the 'Money Genogram,' a model used to identify financial patterns within a family. This tool includes: drawing a family tree, classifying family members according to the three dimensions of the relationship with money (A, U, M), and determining whether each individual's financial behavior is healthy (+) or unhealthy (-). For example, if a person grows up in a family accustomed to excessive spending, they may have a strong tendency to follow the same pattern, or the exact opposite, becoming excessively frugal as a psychological reaction."
+}
+JSON valid: True
+Schema valid: True

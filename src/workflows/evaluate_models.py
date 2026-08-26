@@ -15,7 +15,7 @@ from src.utils.story_loader import load_story
 
 
 EvaluationTask = Literal["extraction", "translation", "both"]
-ModelChoice = Literal["qwen", "gemini", "both"]
+ModelChoice = Literal["qwen", "gemini", "openai", "all"]
 
 
 def run_evaluations(
@@ -29,10 +29,13 @@ def run_evaluations(
     extraction_evaluator=evaluate_extraction,
     translation_evaluator=evaluate_translation,
 ) -> list[EvaluationResult]:
-
     story = story_loader(story_path)
     results: list[EvaluationResult] = []
-    providers = ("qwen", "gemini") if model_choice == "both" else (model_choice,)
+    providers = (
+        ("qwen", "gemini", "openai")
+        if model_choice == "all"
+        else (model_choice,)
+    )
     for provider in providers:
         runtime = model_loader(provider)
         if task in {"extraction", "both"}:
@@ -53,11 +56,11 @@ def run_evaluations(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Compare Qwen and Gemini before fine-tuning.",
+        description="Compare Qwen, Gemini, and OpenAI before fine-tuning.",
     )
     parser.add_argument(
         "--model",
-        choices=("qwen", "gemini", "both"),
+        choices=("qwen", "gemini", "openai", "all"),
         default="qwen",
         help="Model provider to evaluate (default: qwen).",
     )

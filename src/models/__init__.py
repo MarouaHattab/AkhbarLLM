@@ -2,6 +2,7 @@ from src.models.evaluation import EvaluationResult
 from src.models.gemini import GeminiModel
 from src.models.language_model import ChatMessage, LanguageModel
 from src.models.news import Entity, NewsDetails
+from src.models.openai import OpenAIModel
 from src.models.qwen import (
     QwenModel,
     QwenRuntime,
@@ -17,6 +18,7 @@ __all__ = [
     "ChatMessage",
     "LanguageModel",
     "NewsDetails",
+    "OpenAIModel",
     "QwenModel",
     "QwenRuntime",
     "RuntimeTarget",
