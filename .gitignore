@@ -10,4 +10,6 @@ wheels/
 .venv
 .env
 .uv-cache/
+.hf-cache/
 LlamaFactor/
+docs
