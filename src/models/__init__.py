@@ -1,12 +1,23 @@
 from src.models.evaluation import EvaluationResult
+from src.models.gemini import GeminiModel
+from src.models.language_model import ChatMessage, LanguageModel
 from src.models.news import Entity, NewsDetails
-from src.models.qwen import QwenRuntime, RuntimeTarget, select_runtime_target
+from src.models.qwen import (
+    QwenModel,
+    QwenRuntime,
+    RuntimeTarget,
+    select_runtime_target,
+)
 from src.models.translation import TranslatedStory
 
 __all__ = [
     "Entity",
     "EvaluationResult",
+    "GeminiModel",
+    "ChatMessage",
+    "LanguageModel",
     "NewsDetails",
+    "QwenModel",
     "QwenRuntime",
     "RuntimeTarget",
     "TranslatedStory",

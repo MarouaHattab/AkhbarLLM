@@ -6,10 +6,16 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.helpers.config import (
-    BASE_MODEL_ID,
     MODEL_CACHE_DIR,
-    generation_kwargs,
+    QWEN_CPU_DEVICE,
+    QWEN_CPU_DTYPE,
+    QWEN_CUDA_DEVICE,
+    QWEN_CUDA_DTYPE,
+    QWEN_DEVICE_MAP,
+    QWEN_MODEL_ID,
+    qwen_generation_kwargs,
 )
+from src.models.language_model import ChatMessage
 
 
 @dataclass(frozen=True)
@@ -25,27 +31,36 @@ def select_runtime_target(
     """Choose CUDA/float16 when available, otherwise CPU/float32."""
     if cuda_available():
         return RuntimeTarget(
-            device="cuda",
-            dtype=torch.float16,
-            device_map="auto",
+            device=QWEN_CUDA_DEVICE,
+            dtype=getattr(torch, QWEN_CUDA_DTYPE),
+            device_map=QWEN_DEVICE_MAP,
         )
 
     return RuntimeTarget(
-        device="cpu",
-        dtype=torch.float32,
+        device=QWEN_CPU_DEVICE,
+        dtype=getattr(torch, QWEN_CPU_DTYPE),
         device_map=None,
     )
 
 
-class QwenRuntime:
-    def __init__(self, model: Any, tokenizer: Any) -> None:
+class QwenModel:
+    provider = "qwen"
+
+    def __init__(
+        self,
+        model: Any,
+        tokenizer: Any,
+        model_id: str = QWEN_MODEL_ID,
+    ) -> None:
         self.model = model
         self.tokenizer = tokenizer
+        self.model_id = model_id
 
     @classmethod
     def load(
         cls,
         token: str,
+        model_id: str = QWEN_MODEL_ID,
         target: RuntimeTarget | None = None,
         model_loader: Callable[..., Any] = (
             AutoModelForCausalLM.from_pretrained
@@ -53,7 +68,7 @@ class QwenRuntime:
         tokenizer_loader: Callable[..., Any] = (
             AutoTokenizer.from_pretrained
         ),
-    ) -> "QwenRuntime":
+    ) -> "QwenModel":
         """Load the configured base model and tokenizer."""
         selected = target or select_runtime_target()
         model_kwargs: dict[str, Any] = {
@@ -64,22 +79,22 @@ class QwenRuntime:
         if selected.device_map is not None:
             model_kwargs["device_map"] = selected.device_map
 
-        model = model_loader(BASE_MODEL_ID, **model_kwargs)
+        model = model_loader(model_id, **model_kwargs)
         if selected.device_map is None:
             model.to(selected.device)
         model.eval()
 
         tokenizer = tokenizer_loader(
-            BASE_MODEL_ID,
+            model_id,
             cache_dir=MODEL_CACHE_DIR,
             token=token,
         )
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        return cls(model=model, tokenizer=tokenizer)
+        return cls(model=model, tokenizer=tokenizer, model_id=model_id)
 
-    def generate(self, messages: list[dict[str, str]]) -> str:
+    def generate(self, messages: list[ChatMessage]) -> str:
         """Generate and decode only tokens produced after the prompt."""
         text = self.tokenizer.apply_chat_template(
             messages,
@@ -95,7 +110,7 @@ class QwenRuntime:
         with torch.inference_mode():
             generated_ids = self.model.generate(
                 **model_inputs,
-                **generation_kwargs(),
+                **qwen_generation_kwargs(),
             )
 
         new_token_ids = [
@@ -109,3 +124,6 @@ class QwenRuntime:
             new_token_ids,
             skip_special_tokens=True,
         )[0].strip()
+
+
+QwenRuntime = QwenModel

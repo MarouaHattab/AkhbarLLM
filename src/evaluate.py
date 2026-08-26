@@ -9,51 +9,57 @@ from src.controllers.evaluation import (
     evaluate_translation,
 )
 from src.helpers.config import DEFAULT_STORY_PATH
-from src.helpers.huggingface import authenticate_huggingface
 from src.models.evaluation import EvaluationResult
-from src.models.qwen import QwenRuntime
+from src.models.factory import load_language_model
 from src.utils.story_loader import load_story
 
 
 EvaluationTask = Literal["extraction", "translation", "both"]
+ModelChoice = Literal["qwen", "gemini", "both"]
 
 
 def run_evaluations(
+    model_choice: ModelChoice,
     task: EvaluationTask,
     story_path: str | Path,
     source_language: str,
     target_language: str,
-    authenticate=authenticate_huggingface,
-    runtime_loader=QwenRuntime.load,
+    model_loader=load_language_model,
     story_loader=load_story,
     extraction_evaluator=evaluate_extraction,
     translation_evaluator=evaluate_translation,
 ) -> list[EvaluationResult]:
 
     story = story_loader(story_path)
-    token = authenticate()
-    runtime = runtime_loader(token)
-
     results: list[EvaluationResult] = []
-    if task in {"extraction", "both"}:
-        results.append(extraction_evaluator(runtime, story))
+    providers = ("qwen", "gemini") if model_choice == "both" else (model_choice,)
+    for provider in providers:
+        runtime = model_loader(provider)
+        if task in {"extraction", "both"}:
+            results.append(extraction_evaluator(runtime, story))
 
-    if task in {"translation", "both"}:
-        results.append(
-            translation_evaluator(
-                runtime,
-                story,
-                target_language=target_language,
-                source_language=source_language,
+        if task in {"translation", "both"}:
+            results.append(
+                translation_evaluator(
+                    runtime,
+                    story,
+                    target_language=target_language,
+                    source_language=source_language,
+                )
             )
-        )
 
     return results
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Evaluate the base Qwen model before fine-tuning.",
+        description="Compare Qwen and Gemini before fine-tuning.",
+    )
+    parser.add_argument(
+        "--model",
+        choices=("qwen", "gemini", "both"),
+        default="qwen",
+        help="Model provider to evaluate (default: qwen).",
     )
     parser.add_argument(
         "--task",
@@ -81,7 +87,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def print_result(result: EvaluationResult) -> None:
-    print(f"\n=== {result.task.upper()} ===")
+    print(
+        f"\n=== {result.provider.upper()} | {result.model_id} | "
+        f"{result.task.upper()} ==="
+    )
     print(result.raw_response)
     print(f"JSON valid: {result.json_valid}")
     print(f"Schema valid: {result.schema_valid}")
@@ -93,6 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         results = run_evaluations(
+            model_choice=args.model,
             task=args.task,
             story_path=args.story,
             source_language=args.source_language,

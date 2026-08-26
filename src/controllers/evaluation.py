@@ -5,7 +5,7 @@ from pydantic import BaseModel, ValidationError
 
 from src.models.evaluation import EvaluationResult
 from src.models.news import NewsDetails
-from src.models.qwen import QwenRuntime
+from src.models.language_model import LanguageModel
 from src.models.translation import TranslatedStory
 from src.tasks import build_extraction_messages, build_translation_messages
 
@@ -14,11 +14,15 @@ def _validate_response(
     task: Literal["extraction", "translation"],
     raw_response: str,
     schema: type[BaseModel],
+    provider: str,
+    model_id: str,
 ) -> EvaluationResult:
     try:
         payload = json.loads(raw_response)
     except json.JSONDecodeError as exc:
         return EvaluationResult(
+            provider=provider,
+            model_id=model_id,
             task=task,
             raw_response=raw_response,
             json_valid=False,
@@ -30,6 +34,8 @@ def _validate_response(
         schema.model_validate(payload)
     except ValidationError as exc:
         return EvaluationResult(
+            provider=provider,
+            model_id=model_id,
             task=task,
             raw_response=raw_response,
             json_valid=True,
@@ -38,6 +44,8 @@ def _validate_response(
         )
 
     return EvaluationResult(
+        provider=provider,
+        model_id=model_id,
         task=task,
         raw_response=raw_response,
         json_valid=True,
@@ -46,7 +54,7 @@ def _validate_response(
 
 
 def evaluate_extraction(
-    runtime: QwenRuntime,
+    runtime: LanguageModel,
     story: str,
 ) -> EvaluationResult:
     messages = build_extraction_messages(story)
@@ -55,11 +63,13 @@ def evaluate_extraction(
         task="extraction",
         raw_response=raw_response,
         schema=NewsDetails,
+        provider=runtime.provider,
+        model_id=runtime.model_id,
     )
 
 
 def evaluate_translation(
-    runtime: QwenRuntime,
+    runtime: LanguageModel,
     story: str,
     target_language: str = "English",
     source_language: str = "Arabic",
@@ -74,4 +84,6 @@ def evaluate_translation(
         task="translation",
         raw_response=raw_response,
         schema=TranslatedStory,
+        provider=runtime.provider,
+        model_id=runtime.model_id,
     )
