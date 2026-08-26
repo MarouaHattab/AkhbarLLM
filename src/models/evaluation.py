@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict
 class EvaluationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    provider: str
+    model_id: str
     task: Literal["extraction", "translation"]
     raw_response: str
     json_valid: bool
