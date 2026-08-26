@@ -6,6 +6,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = PROJECT_ROOT / "src" / ".env"
 DEFAULT_STORY_PATH = PROJECT_ROOT / "data" / "examples" / "story.txt"
 MODEL_CACHE_DIR = PROJECT_ROOT / ".hf-cache" / "hub"
+DATA_DIR = PROJECT_ROOT / "data"
+RAW_DATA_PATH = DATA_DIR / "raw" / "news-sample.jsonl"
+DISTILLATION_OUTPUT_PATH = DATA_DIR / "datasets" / "sft.jsonl"
 
 QWEN_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 QWEN_MAX_NEW_TOKENS = 1024
@@ -27,6 +30,14 @@ GEMINI_RESPONSE_MIME_TYPE = "application/json"
 OPENAI_MODEL_ID = "gpt-4o-mini"
 OPENAI_TEMPERATURE = 0.2
 OPENAI_RESPONSE_FORMAT = {"type": "json_object"}
+
+DISTILLATION_TEACHER_MODEL_ID = "o4-mini"
+DISTILLATION_RESPONSE_FORMAT = {"type": "json_object"}
+DISTILLATION_SHUFFLE_SEED = 101
+DISTILLATION_REPORT_INTERVAL = 10
+O4_MINI_INPUT_PRICE_PER_1M_TOKENS = 1.10
+O4_MINI_CACHED_INPUT_PRICE_PER_1M_TOKENS = 0.275
+O4_MINI_OUTPUT_PRICE_PER_1M_TOKENS = 4.40
 
 # Backward-compatible name used by existing training code.
 BASE_MODEL_ID = QWEN_MODEL_ID

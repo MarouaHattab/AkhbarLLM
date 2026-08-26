@@ -14,6 +14,10 @@ dependencies = [
 ]
 
 [dependency-groups]
+distillation = [
+    "openai>=1.61,<2",
+    "tqdm>=4.67,<5",
+]
 evaluation = [
     "accelerate>=1.2.1,<2",
     "google-api-core>=2.34,<3,!=2.35.0",

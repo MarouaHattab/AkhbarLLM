@@ -970,6 +970,10 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+distillation = [
+    { name = "openai" },
+    { name = "tqdm" },
+]
 evaluation = [
     { name = "accelerate" },
     { name = "google-api-core" },
@@ -1000,6 +1004,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+distillation = [
+    { name = "openai", specifier = ">=1.61,<2" },
+    { name = "tqdm", specifier = ">=4.67,<5" },
+]
 evaluation = [
     { name = "accelerate", specifier = ">=1.2.1,<2" },
     { name = "google-api-core", specifier = ">=2.34,!=2.35.0,<3" },
