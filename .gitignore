@@ -11,5 +11,7 @@ wheels/
 .env
 .uv-cache/
 .hf-cache/
-LlamaFactor/
+LLaMA-Factory/
+outputs/models/news-finetune/*
+!outputs/models/news-finetune/.gitkeep
 docs

@@ -33,6 +33,7 @@ serve = [
 train = [
     "datasets==3.2.0",
     "faker==35.2.0",
+    "huggingface-hub>=0.36.0,<2",
     "json-repair==0.29.1",
     "openai==1.61.0",
     "optimum==1.24.0",

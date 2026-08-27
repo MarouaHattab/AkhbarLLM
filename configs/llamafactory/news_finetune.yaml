@@ -1,0 +1,54 @@
+### model
+model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 64
+lora_target: all
+
+### dataset
+dataset: news_finetune_train
+eval_dataset: news_finetune_val
+template: qwen
+cutoff_len: 3500
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### output
+output_dir: ../outputs/models/news-finetune
+logging_steps: 10
+save_steps: 250
+save_total_limit: 3
+plot_loss: true
+overwrite_output_dir: true
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: false
+fp16: true
+gradient_checkpointing: true
+ddp_timeout: 180000000
+ddp_find_unused_parameters: false
+
+### eval
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 100
+
+### logging
+report_to: wandb
+run_name: newsx-qwen2.5-1.5b-lora
+
+### Hugging Face Hub
+push_to_hub: true
+hub_model_id: marouaht/news-analyzer
+hub_private_repo: true
+hub_strategy: checkpoint

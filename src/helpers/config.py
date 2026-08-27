@@ -17,6 +17,13 @@ LLAMA_FACTORY_TRAIN_PATH = LLAMA_FACTORY_DATA_DIR / "train.json"
 LLAMA_FACTORY_VALIDATION_PATH = LLAMA_FACTORY_DATA_DIR / "val.json"
 LLAMA_FACTORY_TRAIN_DATASET_NAME = "news_finetune_train"
 LLAMA_FACTORY_VALIDATION_DATASET_NAME = "news_finetune_val"
+TRAINING_CONFIG_FILENAME = "news_finetune.yaml"
+TRAINING_CONFIG_SOURCE_PATH = (
+    PROJECT_ROOT / "configs" / "llamafactory" / TRAINING_CONFIG_FILENAME
+)
+FINETUNED_MODEL_RELATIVE_DIR = (
+    Path("outputs") / "models" / "news-finetune"
+)
 
 QWEN_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 QWEN_MAX_NEW_TOKENS = 1024
