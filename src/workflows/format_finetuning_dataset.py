@@ -12,6 +12,8 @@ from src.helpers.config import (
     FINETUNING_FORMAT_SHUFFLE_SEED,
     FINETUNING_TRAIN_SAMPLE_SIZE,
     LLAMA_FACTORY_DATA_DIR,
+    LLAMA_FACTORY_TRAIN_DATASET_NAME,
+    LLAMA_FACTORY_VALIDATION_DATASET_NAME,
 )
 from src.templates.finetuning import SYSTEM_MESSAGE
 from src.utils.jsonl import load_jsonl, write_json
@@ -29,11 +31,11 @@ def _dataset_info_for(
         "history": "history",
     }
     return {
-        "news_finetuning_train": {
+        LLAMA_FACTORY_TRAIN_DATASET_NAME: {
             "file_name": train_file_name,
             "columns": columns,
         },
-        "news_finetuning_validation": {
+        LLAMA_FACTORY_VALIDATION_DATASET_NAME: {
             "file_name": validation_file_name,
             "columns": columns,
         },

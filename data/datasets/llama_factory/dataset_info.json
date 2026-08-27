@@ -1,5 +1,5 @@
 {
-  "news_finetuning_train": {
+  "news_finetune_train": {
     "file_name": "train.json",
     "columns": {
       "prompt": "instruction",
@@ -9,7 +9,7 @@
       "history": "history"
     }
   },
-  "news_finetuning_validation": {
+  "news_finetune_val": {
     "file_name": "val.json",
     "columns": {
       "prompt": "instruction",
