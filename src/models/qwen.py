@@ -96,6 +96,21 @@ class QwenModel:
 
         return cls(model=model, tokenizer=tokenizer, model_id=model_id)
 
+    def count_input_tokens(self, messages: list[ChatMessage]) -> int:
+        token_ids = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+        )
+        return len(token_ids)
+
+    def count_output_tokens(self, text: str) -> int:
+        token_ids = self.tokenizer.encode(
+            text,
+            add_special_tokens=False,
+        )
+        return len(token_ids)
+
     def generate(self, messages: list[ChatMessage]) -> str:
         """Generate and decode only tokens produced after the prompt."""
         text = self.tokenizer.apply_chat_template(

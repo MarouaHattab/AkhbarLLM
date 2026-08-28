@@ -976,6 +976,7 @@ distillation = [
 ]
 evaluation = [
     { name = "accelerate" },
+    { name = "faker" },
     { name = "google-api-core" },
     { name = "google-genai" },
     { name = "huggingface-hub" },
@@ -983,6 +984,7 @@ evaluation = [
     { name = "peft" },
     { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
     { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
+    { name = "tqdm" },
     { name = "transformers" },
 ]
 serve = [
@@ -1012,12 +1014,14 @@ distillation = [
 ]
 evaluation = [
     { name = "accelerate", specifier = ">=1.2.1,<2" },
+    { name = "faker", specifier = "==35.2.0" },
     { name = "google-api-core", specifier = ">=2.34,!=2.35.0,<3" },
     { name = "google-genai", specifier = ">=1.0,<2" },
     { name = "huggingface-hub", specifier = ">=0.36.0,<2" },
     { name = "openai", specifier = ">=1.61,<2" },
     { name = "peft", specifier = "==0.18.1" },
     { name = "torch", specifier = ">=2.5.1" },
+    { name = "tqdm", specifier = ">=4.67,<5" },
     { name = "transformers", specifier = "==4.48.3" },
 ]
 serve = [{ name = "vllm", marker = "sys_platform == 'linux'", specifier = "==0.7.2" }]

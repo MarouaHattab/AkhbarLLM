@@ -20,12 +20,14 @@ distillation = [
 ]
 evaluation = [
     "accelerate>=1.2.1,<2",
+    "faker==35.2.0",
     "google-api-core>=2.34,<3,!=2.35.0",
     "google-genai>=1.0,<2",
     "huggingface-hub>=0.36.0,<2",
     "openai>=1.61,<2",
     "peft==0.18.1",
     "torch>=2.5.1",
+    "tqdm>=4.67,<5",
     "transformers==4.48.3",
 ]
 serve = [
