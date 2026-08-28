@@ -1,40 +1,36 @@
-## News Fine-Tuning
+## Evaluate the fine-tuned model
 
-### Prepare fine-tuning
+The `finetuned` provider loads `Qwen/Qwen2.5-1.5B-Instruct` and
+attaches the local LoRA adapter from:
 
-Set these API keys in `src/.env`:
-
-```dotenv
-HF_TOKEN=your_hugging_face_token
-WANDB_API_KEY=your_wandb_api_key
+```text
+outputs/models/news-finetune
 ```
 
-Clone LLaMA-Factory into `LLaMA-Factory`, format and register the datasets,
-then run the preparation command:
+Evaluate extraction and translation with the default story in
+`data/examples/story.txt`:
 
 ```powershell
-uv run --group train python -m src.workflows.prepare_finetuning
+uv run --group evaluation python -m src.workflows.evaluate_models --model finetuned --task both
 ```
 
-This command authenticates Hugging Face and W&B, registers the datasets,
-copies `news_finetune.yaml` into LLaMA-Factory, and creates
-`outputs/models/news-finetune`. It does not start training.
+Save the report directly from Python so Arabic text stays readable on
+Windows:
 
-For Kaggle or another checkout, override the portable paths:
-
-```bash
-python -m src.workflows.prepare_finetuning \
-  --llamafactory-dir /kaggle/working/LLaMA-Factory \
-  --train-path /kaggle/working/llamafactory-finetune-data/train.json \
-  --val-path /kaggle/working/llamafactory-finetune-data/val.json
+```powershell
+uv run --group evaluation python -m src.workflows.evaluate_models --model finetuned --task both --output outputs/Evaluation/qwen-finetuned-evaluation.txt
 ```
 
-Start training manually later from the LLaMA-Factory directory:
+Avoid piping evaluation output through PowerShell and then writing it
+with `Set-Content`. On Windows, that capture step can misread UTF-8 as
+the legacy CP850 code page and turn Arabic into garbled text such as
+`Ï»┘êÏ▒`.
 
-```bash
-llamafactory-cli train examples/train_lora/news_finetune.yaml
+To compare the base Qwen model, fine-tuned Qwen model, Gemini, and OpenAI:
+
+```powershell
+uv run --group evaluation python -m src.workflows.evaluate_models --model all --task both
 ```
 
-The LoRA checkpoints are stored under `outputs/models/news-finetune` and are
-ignored by Git. The training configuration privately pushes checkpoints to
-`marouaht/news-analyzer` on the Hugging Face Hub.
+The `finetuned` command runs the local model and does not call a paid API.
+The `all` command also calls Gemini and OpenAI and may incur API charges.

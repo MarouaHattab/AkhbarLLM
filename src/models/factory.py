@@ -3,6 +3,7 @@ from typing import Any
 
 from src.helpers.environment import require_api_key
 from src.helpers.huggingface import authenticate_huggingface
+from src.models.finetuned_qwen import FineTunedQwenModel
 from src.models.gemini import GeminiModel
 from src.models.language_model import LanguageModel
 from src.models.openai import OpenAIModel
@@ -27,17 +28,31 @@ def load_language_model(
     huggingface_authenticator: Callable[[], str] = authenticate_huggingface,
     secret_loader: Callable[[str], str] = require_api_key,
     qwen_loader: Callable[[str], LanguageModel] = QwenModel.load,
+    finetuned_loader: Callable[[str], LanguageModel] = (
+        FineTunedQwenModel.load
+    ),
     gemini_client_factory: Callable[..., Any] = _create_gemini_client,
     gemini_model_factory: Callable[[Any], LanguageModel] = GeminiModel,
     openai_client_factory: Callable[..., Any] = _create_openai_client,
     openai_model_factory: Callable[[Any], LanguageModel] = OpenAIModel,
 ) -> LanguageModel:
     normalized = provider.strip().casefold()
-    if normalized not in {"qwen", "gemini", "openai"}:
+    if normalized not in {
+        "qwen",
+        "finetuned",
+        "gemini",
+        "openai",
+    }:
         raise ValueError(f"Unsupported model provider: {provider}")
 
-    if normalized == "qwen":
-        return qwen_loader(huggingface_authenticator())
+    if normalized in {"qwen", "finetuned"}:
+        token = huggingface_authenticator()
+        loader = (
+            qwen_loader
+            if normalized == "qwen"
+            else finetuned_loader
+        )
+        return loader(token)
 
     if normalized == "gemini":
         api_key = secret_loader("GEMINI_API_KEY")

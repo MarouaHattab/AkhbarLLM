@@ -16,6 +16,7 @@ from src.helpers.config import (
     LLAMA_FACTORY_VALIDATION_DATASET_NAME,
 )
 from src.templates.finetuning import SYSTEM_MESSAGE
+from src.utils.console import configure_utf8_output
 from src.utils.jsonl import load_jsonl, write_json
 
 
@@ -40,11 +41,6 @@ def _dataset_info_for(
             "columns": columns,
         },
     }
-
-
-def configure_stdout_encoding(stdout: Any) -> None:
-    if hasattr(stdout, "reconfigure"):
-        stdout.reconfigure(encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -194,7 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     build_parser().parse_args(argv)
-    configure_stdout_encoding(sys.stdout)
+    configure_utf8_output(sys.stdout)
     format_finetuning_dataset()
     return 0
 

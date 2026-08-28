@@ -51,10 +51,12 @@ class QwenModel:
         model: Any,
         tokenizer: Any,
         model_id: str = QWEN_MODEL_ID,
+        logits_processors: list[Callable[[Any, Any], Any]] | None = None,
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
         self.model_id = model_id
+        self.logits_processors = list(logits_processors or [])
 
     @classmethod
     def load(
@@ -107,10 +109,14 @@ class QwenModel:
             padding=True,
         ).to(self.model.device)
 
+        generation_kwargs = qwen_generation_kwargs()
+        if self.logits_processors:
+            generation_kwargs["logits_processor"] = self.logits_processors
+
         with torch.inference_mode():
             generated_ids = self.model.generate(
                 **model_inputs,
-                **qwen_generation_kwargs(),
+                **generation_kwargs,
             )
 
         new_token_ids = [
