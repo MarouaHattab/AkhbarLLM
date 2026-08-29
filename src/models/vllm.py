@@ -36,6 +36,8 @@ class VLLMModel:
         api_key: str = VLLM_LOCAL_API_KEY,
         model_id: str = VLLM_MODEL_ID,
         timeout: float = VLLM_REQUEST_TIMEOUT_SECONDS,
+        temperature: float = VLLM_TEMPERATURE,
+        max_tokens: int = VLLM_MAX_TOKENS,
         client_factory: Callable[..., Any] | None = None,
     ) -> "VLLMModel":
         if client_factory is None:
@@ -47,7 +49,12 @@ class VLLMModel:
             api_key=api_key,
             timeout=timeout,
         )
-        return cls(client, model_id=model_id)
+        return cls(
+            client,
+            model_id=model_id,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
 
     def generate(self, messages: list[ChatMessage]) -> str:
         try:

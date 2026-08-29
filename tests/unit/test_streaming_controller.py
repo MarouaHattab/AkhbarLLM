@@ -148,3 +148,31 @@ def test_builder_defaults_to_finetuned_and_requires_streaming_runtime(
     controller = build_streaming_controller(runtime_loader=loader)
     assert controller.runtime.provider == "fake"
     assert requested == ["finetuned"]
+
+
+def test_builder_forwards_vllm_runtime_overrides() -> None:
+    captured: dict[str, object] = {}
+
+    def loader(provider: str, **kwargs: object) -> object:
+        captured.update(provider=provider, **kwargs)
+        return FakeRuntime(["ok"])
+
+    controller = build_streaming_controller(
+        "vllm",
+        vllm_base_url="http://server/v1",
+        vllm_api_key="secret",
+        vllm_model_id="news",
+        vllm_temperature=0.15,
+        vllm_max_tokens=640,
+        runtime_loader=loader,
+    )
+
+    assert controller.runtime.provider == "fake"
+    assert captured == {
+        "provider": "vllm",
+        "vllm_base_url": "http://server/v1",
+        "vllm_api_key": "secret",
+        "vllm_model_id": "news",
+        "vllm_temperature": 0.15,
+        "vllm_max_tokens": 640,
+    }

@@ -38,6 +38,29 @@ def test_vllm_is_a_streaming_language_model() -> None:
     assert isinstance(runtime, StreamingLanguageModel)
 
 
+def test_load_applies_explicit_generation_settings() -> None:
+    captured: dict[str, Any] = {}
+
+    def client_factory(**kwargs: Any) -> object:
+        captured.update(kwargs)
+        return object()
+
+    model = VLLMModel.load(
+        base_url="http://server/v1",
+        api_key="secret",
+        model_id="news",
+        temperature=0.15,
+        max_tokens=640,
+        client_factory=client_factory,
+    )
+
+    assert model.temperature == 0.15
+    assert model.max_tokens == 640
+    assert model.model_id == "news"
+    assert captured["base_url"] == "http://server/v1"
+    assert captured["api_key"] == "secret"
+
+
 def test_vllm_stream_yields_delta_content() -> None:
     runtime, completions = runtime_with(
         [event(None), event('{"translated'), event('_title": "خبر"}')]

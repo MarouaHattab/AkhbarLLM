@@ -96,3 +96,33 @@ def test_factory_passes_vllm_environment(
         "api_key": "secret",
         "model_id": "deployed-news",
     }
+
+
+def test_vllm_provider_forwards_explicit_settings() -> None:
+    from src.models.factory import load_language_model
+
+    captured: dict[str, Any] = {}
+    runtime = object()
+
+    def vllm_loader(**kwargs: Any) -> object:
+        captured.update(kwargs)
+        return runtime
+
+    loaded = load_language_model(
+        "vllm",
+        vllm_loader=vllm_loader,
+        vllm_base_url="http://server/v1",
+        vllm_api_key="secret",
+        vllm_model_id="news",
+        vllm_temperature=0.15,
+        vllm_max_tokens=640,
+    )
+
+    assert loaded is runtime
+    assert captured == {
+        "base_url": "http://server/v1",
+        "api_key": "secret",
+        "model_id": "news",
+        "temperature": 0.15,
+        "max_tokens": 640,
+    }

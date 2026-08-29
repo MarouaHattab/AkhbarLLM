@@ -57,23 +57,38 @@ def _create_openai_model(client: Any) -> LanguageModel:
     return OpenAIModel(client)
 
 
-def _load_vllm() -> LanguageModel:
+def _load_vllm(
+    *,
+    base_url: str | None = None,
+    api_key: str | None = None,
+    model_id: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+) -> LanguageModel:
     from src.models.vllm import VLLMModel
 
-    return VLLMModel.load(
-        base_url=(
-            read_optional_setting("VLLM_API_BASE_URL")
+    load_kwargs: dict[str, Any] = {
+        "base_url": (
+            base_url
+            or read_optional_setting("VLLM_API_BASE_URL")
             or VLLM_API_BASE_URL
         ),
-        api_key=(
-            read_optional_setting("VLLM_API_KEY")
+        "api_key": (
+            api_key
+            or read_optional_setting("VLLM_API_KEY")
             or VLLM_LOCAL_API_KEY
         ),
-        model_id=(
-            read_optional_setting("VLLM_MODEL_ID")
+        "model_id": (
+            model_id
+            or read_optional_setting("VLLM_MODEL_ID")
             or VLLM_MODEL_ID
         ),
-    )
+    }
+    if temperature is not None:
+        load_kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        load_kwargs["max_tokens"] = max_tokens
+    return VLLMModel.load(**load_kwargs)
 
 
 def load_language_model(
@@ -87,7 +102,12 @@ def load_language_model(
     gemini_model_factory: Callable[[Any], LanguageModel] = _create_gemini_model,
     openai_client_factory: Callable[..., Any] = _create_openai_client,
     openai_model_factory: Callable[[Any], LanguageModel] = _create_openai_model,
-    vllm_loader: Callable[[], LanguageModel] = _load_vllm,
+    vllm_loader: Callable[..., LanguageModel] = _load_vllm,
+    vllm_base_url: str | None = None,
+    vllm_api_key: str | None = None,
+    vllm_model_id: str | None = None,
+    vllm_temperature: float | None = None,
+    vllm_max_tokens: int | None = None,
 ) -> LanguageModel:
     normalized = provider.strip().casefold()
     if normalized not in {
@@ -100,7 +120,13 @@ def load_language_model(
         raise ValueError(f"Unsupported model provider: {provider}")
 
     if normalized == "vllm":
-        return vllm_loader()
+        return vllm_loader(
+            base_url=vllm_base_url,
+            api_key=vllm_api_key,
+            model_id=vllm_model_id,
+            temperature=vllm_temperature,
+            max_tokens=vllm_max_tokens,
+        )
 
     if normalized in {"qwen", "finetuned"}:
         token = huggingface_authenticator()

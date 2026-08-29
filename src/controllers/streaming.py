@@ -62,14 +62,30 @@ class NewsStreamingController:
 def build_streaming_controller(
     provider: str | None = None,
     *,
-    runtime_loader: Callable[[str], LanguageModel] = load_language_model,
+    runtime_loader: Callable[..., LanguageModel] = load_language_model,
+    vllm_base_url: str | None = None,
+    vllm_api_key: str | None = None,
+    vllm_model_id: str | None = None,
+    vllm_temperature: float | None = None,
+    vllm_max_tokens: int | None = None,
 ) -> NewsStreamingController:
     selected_provider = (
         provider
         or read_optional_setting("NEWS_MODEL_PROVIDER")
         or "finetuned"
     ).strip().casefold()
-    runtime = runtime_loader(selected_provider)
+    runtime_options = {
+        key: value
+        for key, value in {
+            "vllm_base_url": vllm_base_url,
+            "vllm_api_key": vllm_api_key,
+            "vllm_model_id": vllm_model_id,
+            "vllm_temperature": vllm_temperature,
+            "vllm_max_tokens": vllm_max_tokens,
+        }.items()
+        if value is not None
+    }
+    runtime = runtime_loader(selected_provider, **runtime_options)
     if not isinstance(runtime, StreamingLanguageModel):
         raise TypeError(
             f"Model provider {selected_provider!r} does not support streaming."
