@@ -37,6 +37,15 @@ PAGE_CSS = """
 }
 .stApp { background: var(--paper); color: var(--ink); }
 [data-testid="stHeader"] { background: transparent; }
+[data-testid="stWidgetLabel"] p,
+[data-testid="stRadio"] label,
+[data-testid="stRadio"] label p,
+[data-testid="stFileUploader"] small,
+[data-testid="stCaptionContainer"] p {
+  color: var(--ink) !important;
+}
+[data-testid="stCaptionContainer"] p,
+[data-testid="stFileUploader"] small { color: var(--muted) !important; }
 .block-container {
   max-width: 1320px;
   padding-top: 2rem;
