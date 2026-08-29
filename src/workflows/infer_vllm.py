@@ -2,13 +2,13 @@ import argparse
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from src.controllers.evaluation import evaluate_extraction, evaluate_translation
 from src.controllers.serving import wait_for_served_model
 from src.helpers import config
 from src.models.evaluation import EvaluationResult
-from src.models.vllm import VLLMModel
+from src.models.factory import load_language_model
 from src.utils.console import configure_utf8_output
 from src.utils.evaluation_report import print_result, write_report
 from src.utils.story_loader import load_story
@@ -17,12 +17,17 @@ from src.utils.story_loader import load_story
 InferenceTask = Literal["extraction", "translation", "both"]
 
 
+def _load_served_vllm() -> Any:
+    """Load the local served adapter through the shared model factory."""
+    return load_language_model("vllm")
+
+
 def run_vllm_inference(
     task: InferenceTask,
     story_path: str | Path,
     source_language: str,
     target_language: str,
-    model_loader: Callable[[], VLLMModel] = VLLMModel.load,
+    model_loader: Callable[[], Any] = _load_served_vllm,
     readiness_checker: Callable[..., list[str]] = wait_for_served_model,
     story_loader: Callable[[str | Path], str] = load_story,
     extraction_evaluator: Callable[..., EvaluationResult] = evaluate_extraction,

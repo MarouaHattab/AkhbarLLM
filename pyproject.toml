@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "news-finetuning"
 version = "0.1.0"
-description = "Add your description here"
+description = "Arabic news distillation, Qwen LoRA fine-tuning, evaluation, and local vLLM serving."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -61,3 +61,4 @@ include = ["src*"]
 [tool.pytest.ini_options]
 # Avoid the Windows-locked `.pytest_cache/v` path from earlier runs.
 cache_dir = ".cache/pytest"
+testpaths = ["tests"]

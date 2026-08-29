@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 
+# Paths
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = PROJECT_ROOT / "src" / ".env"
 DEFAULT_STORY_PATH = PROJECT_ROOT / "data" / "examples" / "story.txt"
@@ -25,14 +26,18 @@ FINETUNED_MODEL_RELATIVE_DIR = (
     Path("outputs") / "models" / "news-finetune"
 )
 FINETUNED_MODEL_DIR = PROJECT_ROOT / FINETUNED_MODEL_RELATIVE_DIR
+
+# Local evaluation / benchmark
 BENCHMARK_SAMPLE_COUNT = 30
 BENCHMARK_RANDOM_SEED = 101
 BENCHMARK_MIN_PROMPT_CHARS = 150
 BENCHMARK_MAX_PROMPT_CHARS = 200
 BENCHMARK_OUTPUT_DIR = PROJECT_ROOT / "outputs" / "Evaluation"
 
+# Base model
 QWEN_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 
+# Local vLLM serving (Windows client → WSL server)
 VLLM_MODEL_ID = "news-lora"
 VLLM_BASE_MODEL_ID = QWEN_MODEL_ID
 VLLM_ADAPTER_DIR = FINETUNED_MODEL_DIR
@@ -43,6 +48,8 @@ VLLM_TEMPERATURE = 0.3
 VLLM_REQUEST_TIMEOUT_SECONDS = 180.0
 VLLM_READINESS_ATTEMPTS = 120
 VLLM_READINESS_INTERVAL_SECONDS = 5.0
+
+# Locust load test
 VLLM_LOAD_TEST_OUTPUT_DIR = PROJECT_ROOT / "outputs" / "LoadTesting"
 VLLM_LOAD_TEST_JSONL_PATH = VLLM_LOAD_TEST_OUTPUT_DIR / "vllm-tokens.jsonl"
 VLLM_LOAD_TEST_HTML_PATH = VLLM_LOAD_TEST_OUTPUT_DIR / "locust-results.html"
@@ -55,6 +62,7 @@ VLLM_LOAD_TEST_MAX_PROMPT_CHARS = 200
 VLLM_LOAD_TEST_MAX_TOKENS = 512
 VLLM_LOAD_TEST_TEMPERATURE = 0.3
 
+# Hugging Face Qwen generation
 QWEN_MAX_NEW_TOKENS = 1024
 QWEN_DO_SAMPLE = False
 QWEN_TEMPERATURE = None
@@ -66,6 +74,7 @@ QWEN_CUDA_DTYPE = "float16"
 QWEN_CPU_DTYPE = "float32"
 QWEN_DEVICE_MAP = "auto"
 
+# Cloud evaluation models
 GEMINI_MODEL_ID = "gemini-3.1-flash-lite"
 GEMINI_MAX_OUTPUT_TOKENS = 1024
 GEMINI_TEMPERATURE = 0.2
@@ -75,6 +84,7 @@ OPENAI_MODEL_ID = "gpt-4o-mini"
 OPENAI_TEMPERATURE = 0.2
 OPENAI_RESPONSE_FORMAT = {"type": "json_object"}
 
+# Distillation
 DISTILLATION_TEACHER_MODEL_ID = "o4-mini"
 DISTILLATION_RESPONSE_FORMAT = {"type": "json_object"}
 DISTILLATION_SHUFFLE_SEED = 101

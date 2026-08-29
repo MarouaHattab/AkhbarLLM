@@ -1,17 +1,23 @@
 import argparse
 import sys
 from collections.abc import Callable, Sequence
+from typing import Any
 
 from src.controllers.serving import list_served_model_ids, wait_for_served_model
 from src.helpers import config
-from src.models.vllm import VLLMModel
+from src.models.factory import load_language_model
 from src.utils.console import configure_utf8_output
+
+
+def _load_served_vllm() -> Any:
+    """Load the local served adapter through the shared model factory."""
+    return load_language_model("vllm")
 
 
 def check_vllm(
     *,
     wait: bool,
-    model_loader: Callable[[], VLLMModel] = VLLMModel.load,
+    model_loader: Callable[[], Any] = _load_served_vllm,
     waiter: Callable[..., list[str]] = wait_for_served_model,
 ) -> list[str]:
     """Return served model IDs after checking the configured model is ready."""
