@@ -1,7 +1,7 @@
 # Streamlit Industrial Inference Studio Design
 
 Date: 2026-08-29
-Status: Approved direction; awaiting written-spec review
+Status: Approved
 Target branch: `master`
 
 ## Outcome
@@ -168,6 +168,68 @@ typing motion is presentation around the real streamed chunks.
   for diagnosis.
 - The UI will not expose a public vLLM port or add authentication infrastructure;
   deployment should keep vLLM on a private network.
+
+## Resolved implementation decisions
+
+These lock the remaining UI details so the written spec matches the
+AppTests and the industrial theme tokens.
+
+### Files
+
+- `src/ui/settings.py` owns immutable, validated session settings.
+- `src/ui/theme.py` owns Industrial CSS tokens and layout rules.
+- `src/ui/streamlit_app.py` owns page composition, sidebar, tabs, and the
+  live output column.
+- `src/controllers/vllm_status.py` owns the real `/v1/models` check and
+  maps check outcomes to `not_checked`, `connected`, and `unavailable`.
+- `.streamlit/config.toml` sets the dark Streamlit base theme.
+
+### Visual tokens
+
+- Surface: warm-black `#0B0C0A` with panel `#111410` and hairline `#293027`.
+- Ink: `#ECF4EA`. Muted: `#8B9788`. Signal: `#00E676`.
+- Type: monospace only (`Cascadia Mono`, `IBM Plex Mono`, `ui-monospace`).
+- Structure: 1 px borders, `border-radius: 0`, no shadow, glow, or gradient.
+- Inputs stay at 16 px. Columns stack below 900 px.
+- No page emoji. No History tab, Architecture tab, or session metrics.
+
+### Sidebar
+
+- Product name plus one status line. For vLLM the line is
+  `vLLM · Not checked|Connected|Unavailable`. Direct inference shows
+  `Direct fine-tuned model` and never a connected badge.
+- Backend labels: `vLLM` and `Direct fine-tuned model`.
+- vLLM widgets: `API base URL`, `Model ID`, `API key override`,
+  `Temperature` (0–1), `Maximum output tokens` (1–4096), and
+  `Check connection`.
+- The API key field is a password input whose displayed value is always
+  blank. A blank field uses `VLLM_API_KEY` internally. The secret is
+  never used as a widget `value` and is stripped from displayed errors.
+- Connection status is keyed by `(base_url, model_id)` and stays
+  `Not checked` until the user runs a successful check.
+- Direct inference shows the adapter source and `Qwen/Qwen2.5-1.5B-Instruct`
+  as captions, not editable fields.
+
+### Workspace
+
+- Header title: `ArabLLM Inference Studio`.
+- Tabs: `Extraction` and `Translation` only.
+- Widget keys: `extraction_story`, `extraction_upload`, `extraction_submit`,
+  `translation_story`, `translation_upload`, `translation_source_language`,
+  `translation_target_language`, `translation_submit`.
+- Each tab stores `st.session_state["last_result_{task}"]` so one task cannot
+  overwrite the other.
+- The right column heading is `Live output`. It captions the active backend
+  and model/adapter, then streams through `st.write_stream`.
+- Status labels: `Preparing inference…`, `Waiting for the first token…`,
+  `Streaming response…`, then `Generation complete` or `Generation failed`.
+
+### Cache
+
+`get_controller` is an `st.cache_resource` function whose argument is
+`InferenceSettings`. Direct inference passes only the provider into
+`build_streaming_controller`, so generation stays on tested defaults.
+vLLM passes explicit URL, key, model ID, temperature, and max tokens.
 
 ## Compatibility
 

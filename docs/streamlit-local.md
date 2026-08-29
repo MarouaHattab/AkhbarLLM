@@ -51,6 +51,24 @@ The model is cached with `st.cache_resource`, so Streamlit reruns do not reload
 the weights. A CUDA GPU is selected automatically when available; otherwise the
 model runs on CPU and generation will be much slower.
 
+## Sidebar configuration
+
+`src/.env` supplies reproducible defaults. The sidebar overrides them for the
+current browser session only and never writes `src/.env`.
+
+- **Backend** chooses `vLLM` or `Direct fine-tuned model`.
+- For vLLM, set the API base URL, model ID, temperature, and maximum output
+  tokens. Leave **API key override** blank to use `VLLM_API_KEY`. The field
+  never displays the environment secret.
+- **Check connection** queries the configured server and confirms the model ID
+  is served. Status stays `Not checked` until that action succeeds. The other
+  states are `Connected` and `Unavailable`.
+- Direct inference shows the adapter source and base model as read-only
+  information. Generation stays on the project's deterministic defaults.
+
+Extraction and Translation are separate tabs. Submitting one task does not
+change the other task's inputs or last result.
+
 ## Run with vLLM
 
 The included vLLM launcher uses WSL2/Linux because vLLM is not installed on

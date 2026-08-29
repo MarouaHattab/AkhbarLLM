@@ -1,7 +1,15 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from src.controllers.serving import list_served_model_ids
+
+
+ConnectionState = Literal["not_checked", "connected", "unavailable"]
+CONNECTION_STATUS_LABELS: dict[ConnectionState, str] = {
+    "not_checked": "Not checked",
+    "connected": "Connected",
+    "unavailable": "Unavailable",
+}
 
 
 @dataclass(frozen=True)
@@ -24,3 +32,11 @@ def check_vllm_connection(
         connected=True,
         served_model_ids=served,
     )
+
+
+def connection_status_label(state: ConnectionState) -> str:
+    return CONNECTION_STATUS_LABELS[state]
+
+
+def connection_state_from_check(error: BaseException | None) -> ConnectionState:
+    return "connected" if error is None else "unavailable"

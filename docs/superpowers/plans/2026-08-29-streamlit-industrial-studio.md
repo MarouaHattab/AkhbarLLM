@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.12, Streamlit 1.x, OpenAI-compatible vLLM client, Transformers/PEFT, Pydantic, pytest, Streamlit AppTest.
 
+**Progress:** Tasks 1–6 complete on `master`.
+
 ---
 
 ## File map
