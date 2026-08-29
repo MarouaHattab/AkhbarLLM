@@ -71,3 +71,6 @@ include = ["src*"]
 # Avoid the Windows-locked `.pytest_cache/v` path from earlier runs.
 cache_dir = ".cache/pytest"
 testpaths = ["tests"]
+markers = [
+    "model_smoke: downloads or loads the real fine-tuned model and runs generation",
+]
