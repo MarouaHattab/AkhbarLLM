@@ -23,3 +23,20 @@ def require_api_key(
     if not value:
         raise RuntimeError(f"{key_name} is missing or empty in {Path(env_path)}")
     return value
+
+
+def read_optional_setting(
+    key_name: str,
+    env_path: str | Path = ENV_PATH,
+    environ: Mapping[str, str] | None = None,
+) -> str | None:
+    """Read a setting from the process or dotenv file without requiring it."""
+    target_environ = os.environ if environ is None else environ
+    file_values = dotenv_values(env_path)
+    value = target_environ.get(key_name)
+    if value is None:
+        value = file_values.get(key_name)
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None

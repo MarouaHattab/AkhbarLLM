@@ -45,6 +45,33 @@ def validate_adapter_path(adapter_path: str | Path) -> Path:
     return adapter_dir
 
 
+def resolve_adapter_source(adapter_source: str | Path) -> str:
+    """Return a validated local path or a normalized owner/repository Hub ID."""
+    if isinstance(adapter_source, Path):
+        return str(validate_adapter_path(adapter_source))
+
+    source = adapter_source.strip()
+    if not source:
+        raise ValueError("Fine-tuned adapter source must not be empty.")
+    candidate = Path(source)
+    if candidate.exists():
+        return str(validate_adapter_path(candidate))
+    if (
+        "\\" in source
+        or source.startswith((".", "/"))
+        or source.count("/") != 1
+    ):
+        raise FileNotFoundError(
+            f"Fine-tuned adapter source not found: {source}"
+        )
+    owner, repository = source.split("/", maxsplit=1)
+    if not owner.strip() or not repository.strip():
+        raise ValueError(
+            f"Invalid Hugging Face adapter repository: {source}"
+        )
+    return source
+
+
 class FineTunedQwenModel(QwenModel):
     """Qwen runtime with the local news-analysis LoRA adapter attached."""
 
@@ -64,7 +91,7 @@ class FineTunedQwenModel(QwenModel):
             AutoTokenizer.from_pretrained
         ),
     ) -> "FineTunedQwenModel":
-        adapter_dir = validate_adapter_path(adapter_path)
+        adapter_source = resolve_adapter_source(adapter_path)
         runtime = super().load(
             token=token,
             model_id=model_id,
@@ -74,15 +101,15 @@ class FineTunedQwenModel(QwenModel):
         )
 
         try:
-            runtime.model.load_adapter(str(adapter_dir))
+            runtime.model.load_adapter(adapter_source, token=token)
         except Exception as exc:
             raise RuntimeError(
                 "Failed to load the fine-tuned adapter from: "
-                f"{adapter_dir}"
+                f"{adapter_source}"
             ) from exc
 
         runtime.model.eval()
-        runtime.model_id = str(adapter_dir)
+        runtime.model_id = adapter_source
         runtime.logits_processors.append(
             ChineseTokenSuppressor(runtime.tokenizer)
         )

@@ -1,7 +1,13 @@
 from collections.abc import Callable
 from typing import Any
 
-from src.helpers.environment import require_api_key
+from src.helpers.config import (
+    FINETUNED_MODEL_DIR,
+    VLLM_API_BASE_URL,
+    VLLM_LOCAL_API_KEY,
+    VLLM_MODEL_ID,
+)
+from src.helpers.environment import read_optional_setting, require_api_key
 from src.models.language_model import LanguageModel
 
 
@@ -32,7 +38,11 @@ def _load_qwen(token: str) -> LanguageModel:
 def _load_finetuned(token: str) -> LanguageModel:
     from src.models.finetuned_qwen import FineTunedQwenModel
 
-    return FineTunedQwenModel.load(token)
+    adapter_source = (
+        read_optional_setting("FINETUNED_ADAPTER_SOURCE")
+        or FINETUNED_MODEL_DIR
+    )
+    return FineTunedQwenModel.load(token, adapter_path=adapter_source)
 
 
 def _create_gemini_model(client: Any) -> LanguageModel:
@@ -50,7 +60,20 @@ def _create_openai_model(client: Any) -> LanguageModel:
 def _load_vllm() -> LanguageModel:
     from src.models.vllm import VLLMModel
 
-    return VLLMModel.load()
+    return VLLMModel.load(
+        base_url=(
+            read_optional_setting("VLLM_API_BASE_URL")
+            or VLLM_API_BASE_URL
+        ),
+        api_key=(
+            read_optional_setting("VLLM_API_KEY")
+            or VLLM_LOCAL_API_KEY
+        ),
+        model_id=(
+            read_optional_setting("VLLM_MODEL_ID")
+            or VLLM_MODEL_ID
+        ),
+    )
 
 
 def load_language_model(
