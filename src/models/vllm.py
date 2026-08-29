@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from src.helpers.config import (
@@ -34,6 +34,7 @@ class VLLMModel:
         *,
         base_url: str = VLLM_API_BASE_URL,
         api_key: str = VLLM_LOCAL_API_KEY,
+        model_id: str = VLLM_MODEL_ID,
         timeout: float = VLLM_REQUEST_TIMEOUT_SECONDS,
         client_factory: Callable[..., Any] | None = None,
     ) -> "VLLMModel":
@@ -46,7 +47,7 @@ class VLLMModel:
             api_key=api_key,
             timeout=timeout,
         )
-        return cls(client)
+        return cls(client, model_id=model_id)
 
     def generate(self, messages: list[ChatMessage]) -> str:
         try:
@@ -84,3 +85,47 @@ class VLLMModel:
                 "vLLM mandatory suppression is broken: generated content contains CJK characters."
             )
         return content
+
+    def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        try:
+            events = self.client.chat.completions.create(
+                model=self.model_id,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                stream=True,
+            )
+            emitted: list[str] = []
+            for event in events:
+                choices = getattr(event, "choices", None)
+                if choices == []:
+                    continue
+                if not choices:
+                    raise RuntimeError(
+                        "vLLM returned an invalid streaming response with no choices."
+                    )
+                delta = getattr(choices[0], "delta", None)
+                if delta is None:
+                    raise RuntimeError("vLLM returned an invalid streaming delta.")
+                content = getattr(delta, "content", None)
+                if content is None:
+                    continue
+                if not isinstance(content, str):
+                    raise RuntimeError("vLLM returned non-text streaming content.")
+                if content:
+                    emitted.append(content)
+                    yield content
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                "vLLM streaming generation failed; check server readiness and credentials."
+            ) from exc
+
+        complete = "".join(emitted)
+        if not complete.strip():
+            raise RuntimeError("vLLM returned blank streamed content.")
+        if contains_chinese_characters(complete):
+            raise RuntimeError(
+                "vLLM mandatory suppression is broken: generated content contains CJK characters."
+            )
