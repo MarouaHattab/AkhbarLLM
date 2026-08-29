@@ -1,6 +1,6 @@
 import json
 
-from src.models import NewsDetails
+from src.models.news import NewsDetails
 from src.templates import EXTRACTION_SYSTEM_PROMPT
 
 

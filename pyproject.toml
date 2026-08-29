@@ -31,7 +31,17 @@ evaluation = [
     "transformers==4.48.3",
 ]
 serve = [
+    "faker==35.2.0",
+    "locust>=2.32,<3",
+    "openai>=1.61,<2",
+    "transformers==4.48.3",
     "vllm==0.7.2 ; sys_platform == 'linux'",
+]
+test = [
+    "httpx>=0.28,<1",
+    "pyyaml>=6.0,<7",
+    "pytest>=8.3,<9",
+    "starlette>=0.41,<1",
 ]
 train = [
     "datasets==3.2.0",
@@ -47,3 +57,7 @@ train = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[tool.pytest.ini_options]
+# Avoid the Windows-locked `.pytest_cache/v` path from earlier runs.
+cache_dir = ".cache/pytest"

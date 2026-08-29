@@ -2,15 +2,7 @@ from typing import Any
 
 import torch
 
-
-def contains_chinese_characters(token: str) -> bool:
-    """Return whether a token contains a character from a CJK block."""
-    return any(
-        "\u4e00" <= character <= "\u9fff"
-        or "\u3400" <= character <= "\u4dbf"
-        or "\uf900" <= character <= "\ufaff"
-        for character in token
-    )
+from src.utils.text import contains_chinese_characters
 
 
 class ChineseTokenSuppressor:

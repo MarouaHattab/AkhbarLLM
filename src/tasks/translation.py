@@ -1,6 +1,6 @@
 import json
 
-from src.models import TranslatedStory
+from src.models.translation import TranslatedStory
 from src.templates import TRANSLATION_SYSTEM_PROMPT_TEMPLATE
 
 
