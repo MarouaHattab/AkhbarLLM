@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Protocol, TypedDict, runtime_checkable
 
 
@@ -13,6 +14,13 @@ class LanguageModel(Protocol):
 
     def generate(self, messages: list[ChatMessage]) -> str:
         """Generate text from normalized chat messages."""
+        ...
+
+
+@runtime_checkable
+class StreamingLanguageModel(LanguageModel, Protocol):
+    def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        """Yield decoded model output as generation produces it."""
         ...
 
 

@@ -1,9 +1,15 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from queue import Queue
+from threading import Thread
 from typing import Any
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TextIteratorStreamer,
+)
 
 from src.helpers.config import (
     MODEL_CACHE_DIR,
@@ -111,22 +117,31 @@ class QwenModel:
         )
         return len(token_ids)
 
-    def generate(self, messages: list[ChatMessage]) -> str:
-        """Generate and decode only tokens produced after the prompt."""
+    def _prepare_generation_inputs(
+        self,
+        messages: list[ChatMessage],
+    ) -> Any:
         text = self.tokenizer.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True,
         )
-        model_inputs = self.tokenizer(
+        return self.tokenizer(
             [text],
             return_tensors="pt",
             padding=True,
         ).to(self.model.device)
 
+    def _generation_kwargs(self) -> dict[str, Any]:
         generation_kwargs = qwen_generation_kwargs()
         if self.logits_processors:
             generation_kwargs["logits_processor"] = self.logits_processors
+        return generation_kwargs
+
+    def generate(self, messages: list[ChatMessage]) -> str:
+        """Generate and decode only tokens produced after the prompt."""
+        model_inputs = self._prepare_generation_inputs(messages)
+        generation_kwargs = self._generation_kwargs()
 
         with torch.inference_mode():
             generated_ids = self.model.generate(
@@ -145,6 +160,50 @@ class QwenModel:
             new_token_ids,
             skip_special_tokens=True,
         )[0].strip()
+
+    def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        """Yield genuine decoder output from a background generation thread."""
+        model_inputs = self._prepare_generation_inputs(messages)
+        streamer = TextIteratorStreamer(
+            self.tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True,
+        )
+        generation_kwargs = self._generation_kwargs()
+        generation_kwargs["streamer"] = streamer
+        worker_errors: Queue[BaseException] = Queue(maxsize=1)
+
+        def generate_in_worker() -> None:
+            try:
+                with torch.inference_mode():
+                    self.model.generate(
+                        **model_inputs,
+                        **generation_kwargs,
+                    )
+            except BaseException as exc:
+                worker_errors.put(exc)
+                streamer.end()
+
+        worker = Thread(
+            target=generate_in_worker,
+            name="qwen-streaming-generation",
+            daemon=True,
+        )
+        worker.start()
+        emitted: list[str] = []
+        try:
+            for chunk in streamer:
+                if chunk:
+                    emitted.append(chunk)
+                    yield chunk
+        finally:
+            worker.join()
+
+        if not worker_errors.empty():
+            cause = worker_errors.get_nowait()
+            raise RuntimeError("Qwen streaming generation failed.") from cause
+        if not "".join(emitted).strip():
+            raise RuntimeError("Qwen streaming generation returned blank output.")
 
 
 QwenRuntime = QwenModel
