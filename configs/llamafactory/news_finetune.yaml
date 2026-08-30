@@ -49,6 +49,6 @@ run_name: newsx-qwen2.5-1.5b-lora
 
 ### Hugging Face Hub
 push_to_hub: true
-hub_model_id: marouaht/news-analyzer
+hub_model_id: marouaht/ArabLLM-news
 hub_private_repo: true
 hub_strategy: checkpoint

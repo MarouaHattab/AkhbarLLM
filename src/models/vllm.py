@@ -3,6 +3,7 @@ from typing import Any
 
 from src.helpers.config import (
     VLLM_API_BASE_URL,
+    VLLM_CONTEXT_WINDOW,
     VLLM_LOCAL_API_KEY,
     VLLM_MAX_TOKENS,
     VLLM_MODEL_ID,
@@ -11,6 +12,28 @@ from src.helpers.config import (
 )
 from src.models.language_model import ChatMessage
 from src.utils.text import contains_chinese_characters
+
+
+def estimate_prompt_tokens(messages: list[ChatMessage]) -> int:
+    total = 0
+    for message in messages:
+        content = (
+            str(message.get("content") or "")
+            if isinstance(message, dict)
+            else str(message)
+        )
+        total += max(1, (len(content) + 2) // 3)
+        total += 8
+    return total
+
+
+def cap_completion_tokens(
+    requested: int,
+    prompt_tokens: int,
+    context_window: int = VLLM_CONTEXT_WINDOW,
+) -> int:
+    available = context_window - prompt_tokens - 8
+    return max(1, min(requested, available))
 
 
 class VLLMModel:
@@ -57,17 +80,19 @@ class VLLMModel:
         )
 
     def generate(self, messages: list[ChatMessage]) -> str:
+        max_tokens = cap_completion_tokens(
+            self.max_tokens,
+            estimate_prompt_tokens(messages),
+        )
         try:
             completion = self.client.chat.completions.create(
                 model=self.model_id,
                 messages=messages,
-                max_tokens=self.max_tokens,
+                max_tokens=max_tokens,
                 temperature=self.temperature,
             )
         except Exception as exc:
-            raise RuntimeError(
-                "vLLM generation failed; check the local server and model readiness."
-            ) from exc
+            raise RuntimeError(f"vLLM generation failed: {exc}") from exc
 
         choices = getattr(completion, "choices", None)
         if not choices:
@@ -94,11 +119,15 @@ class VLLMModel:
         return content
 
     def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
+        max_tokens = cap_completion_tokens(
+            self.max_tokens,
+            estimate_prompt_tokens(messages),
+        )
         try:
             events = self.client.chat.completions.create(
                 model=self.model_id,
                 messages=messages,
-                max_tokens=self.max_tokens,
+                max_tokens=max_tokens,
                 temperature=self.temperature,
                 stream=True,
             )
@@ -126,7 +155,7 @@ class VLLMModel:
             raise
         except Exception as exc:
             raise RuntimeError(
-                "vLLM streaming generation failed; check server readiness and credentials."
+                f"vLLM streaming generation failed: {exc}"
             ) from exc
 
         complete = "".join(emitted)

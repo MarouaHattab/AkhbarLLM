@@ -41,6 +41,24 @@ class InferenceSettings:
         return cls(provider="finetuned")
 
 
+def load_vllm_defaults() -> InferenceSettings:
+    return InferenceSettings(
+        provider="vllm",
+        base_url=(
+            read_optional_setting("VLLM_API_BASE_URL")
+            or VLLM_API_BASE_URL
+        ),
+        api_key=(
+            read_optional_setting("VLLM_API_KEY")
+            or VLLM_LOCAL_API_KEY
+        ),
+        model_id=(
+            read_optional_setting("VLLM_MODEL_ID")
+            or VLLM_MODEL_ID
+        ),
+    )
+
+
 def load_default_settings() -> InferenceSettings:
     provider = (
         read_optional_setting("NEWS_MODEL_PROVIDER") or "finetuned"

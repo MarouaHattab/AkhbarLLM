@@ -1,6 +1,7 @@
 import html
 import json
 import logging
+import time
 from collections.abc import Iterator
 from typing import Any, cast
 
@@ -12,37 +13,29 @@ from src.controllers.streaming import (
     TaskName,
     ValidatedTaskResponse,
     build_streaming_controller,
+    load_model_json,
 )
+from src.controllers.serving import list_served_model_ids
 from src.controllers.vllm_status import (
     ConnectionState,
-    check_vllm_connection,
     connection_state_from_check,
-    connection_status_label,
 )
-from src.helpers.config import (
-    FINETUNED_MODEL_DIR,
-    QWEN_MODEL_ID,
-    VLLM_API_BASE_URL,
-    VLLM_LOCAL_API_KEY,
-    VLLM_MAX_TOKENS,
-    VLLM_MODEL_ID,
-    VLLM_TEMPERATURE,
-)
-from src.helpers.environment import read_optional_setting
+from src.helpers.config import VLLM_API_BASE_URL, VLLM_MODEL_ID
 from src.models.news import NewsDetails
 from src.models.translation import TranslatedStory
+from src.models.vllm import VLLMModel
 from src.ui.input import resolve_story_input
-from src.ui.settings import InferenceSettings, ProviderName, load_default_settings
+from src.ui.settings import InferenceSettings, load_vllm_defaults
 from src.ui.theme import PAGE_CSS
 
 
 LOGGER = logging.getLogger(__name__)
 LANGUAGES = ["Arabic", "English", "French"]
-BACKEND_OPTIONS = ("vLLM", "Direct fine-tuned model")
-BACKEND_BY_LABEL: dict[str, ProviderName] = {
-    "vLLM": "vllm",
-    "Direct fine-tuned model": "finetuned",
-}
+SAMPLE_STORY = (
+    "ذكرت مجلة فوربس أن العائلة تلعب دورا محوريا في تشكيل علاقة الأفراد بالمال، "
+    "حيث تتأثر هذه العلاقة بأنماط السلوك المالي المتوارثة عبر الأجيال. "
+    "التقرير يستند إلى أبحاث الأستاذ الجامعي شاين إنيت حول الرفاه المالي."
+)
 
 
 def _settings_cache_key(settings: InferenceSettings) -> tuple[object, ...]:
@@ -61,16 +54,34 @@ def _settings_cache_key(settings: InferenceSettings) -> tuple[object, ...]:
     hash_funcs={InferenceSettings: _settings_cache_key},
 )
 def get_controller(settings: InferenceSettings) -> NewsStreamingController:
-    if settings.provider != "vllm":
-        return build_streaming_controller(settings.provider)
     return build_streaming_controller(
-        settings.provider,
+        "vllm",
         vllm_base_url=settings.base_url,
         vllm_api_key=settings.api_key,
         vllm_model_id=settings.model_id,
         vllm_temperature=settings.temperature,
         vllm_max_tokens=settings.max_tokens,
     )
+
+
+def _pretty_json(raw: str) -> str:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            payload = load_model_json(raw)
+        except (json.JSONDecodeError, ValueError):
+            return raw
+    if not isinstance(payload, (dict, list)):
+        return raw
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _estimate_tokens(text: str) -> int:
+    stripped = text.strip()
+    if not stripped:
+        return 0
+    return max(1, (len(stripped) + 3) // 4)
 
 
 def _directional_text(text: str, css_class: str = "auto-direction") -> str:
@@ -84,43 +95,28 @@ def _without_secret(text: str, secret: str) -> str:
     return text
 
 
-def _adapter_source() -> str:
-    return read_optional_setting("FINETUNED_ADAPTER_SOURCE") or str(
-        FINETUNED_MODEL_DIR
-    )
-
-
-def _vllm_environment_defaults(
-    defaults: InferenceSettings,
-) -> tuple[str, str, str, float, int]:
-    if defaults.provider == "vllm":
+def _status_badge_html(state: ConnectionState) -> str:
+    if state == "connected":
         return (
-            defaults.base_url,
-            defaults.model_id,
-            defaults.api_key,
-            defaults.temperature,
-            defaults.max_tokens,
+            '<span class="status-online"><span class="dot"></span> '
+            "vLLM Online</span>"
+        )
+    if state == "unavailable":
+        return (
+            '<span class="status-offline"><span class="dot"></span> '
+            "vLLM unavailable</span>"
         )
     return (
-        read_optional_setting("VLLM_API_BASE_URL") or VLLM_API_BASE_URL,
-        read_optional_setting("VLLM_MODEL_ID") or VLLM_MODEL_ID,
-        read_optional_setting("VLLM_API_KEY") or VLLM_LOCAL_API_KEY,
-        VLLM_TEMPERATURE,
-        VLLM_MAX_TOKENS,
+        '<span class="status-idle"><span class="dot"></span> '
+        "vLLM not checked</span>"
     )
 
 
-def _runtime_identity(settings: InferenceSettings) -> str:
-    if settings.provider == "vllm":
-        return f"vLLM · {settings.model_id}"
-    return f"Direct fine-tuned model · {_adapter_source()}"
-
-
-def _connection_state_for(base_url: str, model_id: str) -> ConnectionState:
+def _connection_state_for(base_url: str) -> ConnectionState:
     stored = st.session_state.get("vllm_connection")
     if not isinstance(stored, dict):
         return "not_checked"
-    if stored.get("key") != (base_url.strip(), model_id.strip()):
+    if stored.get("key") != base_url.strip():
         return "not_checked"
     status = stored.get("status")
     if status in {"not_checked", "connected", "unavailable"}:
@@ -128,33 +124,46 @@ def _connection_state_for(base_url: str, model_id: str) -> ConnectionState:
     return "not_checked"
 
 
+def _exception_text(exc: BaseException) -> str:
+    parts = [str(exc)]
+    cause = exc.__cause__ or exc.__context__
+    if cause is not None:
+        parts.append(str(cause))
+    return " ".join(parts).casefold()
+
+
 def _runtime_error_message(
     exc: Exception,
     settings: InferenceSettings,
 ) -> str:
-    message = str(exc).casefold()
-    if "out of memory" in message or (
-        "cuda" in message and "memory" in message
+    text = _exception_text(exc)
+    if "maximum context length" in text or "max context length" in text:
+        return (
+            "This request exceeds the model's 2048-token context window. "
+            "Lower Max tokens in the sidebar or shorten the story."
+        )
+    if "out of memory" in text or (
+        "cuda" in text and "memory" in text
     ):
-        return (
-            "The GPU ran out of memory. Try a shorter story or use the "
-            "vLLM backend."
+        return "The GPU ran out of memory. Try a shorter story."
+    if any(
+        token in text
+        for token in (
+            "connection refused",
+            "connection error",
+            "connecterror",
+            "unreachable",
+            "unavailable",
+            "timed out",
+            "timeout",
+            "name or service not known",
         )
-    if isinstance(exc, FileNotFoundError) or "adapter" in message:
-        return (
-            "The fine-tuned adapter could not be loaded. Check "
-            "FINETUNED_ADAPTER_SOURCE and HF_TOKEN."
-        )
-    if (
-        settings.provider == "vllm"
-        or "vllm" in message
-        or "connection" in message
     ):
         endpoint = settings.base_url or "the configured endpoint"
         return _without_secret(
             (
                 f"The inference server at {endpoint} is unavailable. "
-                "Check the URL, API key, and model readiness."
+                "Check the base URL and that vLLM is running."
             ),
             settings.api_key,
         )
@@ -163,6 +172,11 @@ def _runtime_error_message(
 
 def _validation_error_message(exc: Exception) -> str:
     if isinstance(exc, json.JSONDecodeError):
+        if "expecting value" in exc.msg.casefold() or "unterminated" in exc.msg.casefold():
+            return (
+                "The model stopped before finishing the JSON. "
+                "Try a shorter story."
+            )
         return f"The model returned incomplete or invalid JSON: {exc.msg}."
     if isinstance(exc, ValidationError):
         first = exc.errors()[0]
@@ -175,50 +189,69 @@ def _validation_error_message(exc: Exception) -> str:
 
 
 def _render_extraction(result: NewsDetails) -> None:
-    st.markdown(
-        '<p class="result-label">Extracted story</p>',
-        unsafe_allow_html=True,
+    chips = "".join(
+        f'<span class="keyword-chip">{html.escape(keyword)}</span>'
+        for keyword in result.story_keywords
     )
-    st.markdown(_directional_text(result.story_title), unsafe_allow_html=True)
-    category_col, keyword_col = st.columns([1, 2])
-    category_col.metric(
-        "Category",
-        result.story_category.replace("_", " ").title(),
+    summary_items = "".join(
+        f'<li><span class="auto-direction">{html.escape(point)}</span></li>'
+        for point in result.story_summary
     )
-    keyword_col.caption("Keywords")
-    keyword_col.write(" · ".join(result.story_keywords))
-    st.markdown("#### Summary")
-    for point in result.story_summary:
-        st.markdown(
-            _directional_text(f"— {point}"),
-            unsafe_allow_html=True,
+    entity_rows = "".join(
+        (
+            "<tr>"
+            f'<td class="auto-direction">{html.escape(entity.entity_value)}</td>'
+            f'<td><span class="type-chip">{html.escape(entity.entity_type)}</span></td>'
+            "</tr>"
         )
-    st.markdown("#### Entities")
-    st.dataframe(
-        [entity.model_dump() for entity in result.story_entities],
-        use_container_width=True,
-        hide_index=True,
+        for entity in result.story_entities
+    )
+    category = result.story_category.replace("_", " ").title()
+    st.markdown(
+        f"""
+<div class="result-card">
+  <p class="result-label">Extracted story</p>
+  <h3 class="story-title auto-direction">{html.escape(result.story_title)}</h3>
+  <div class="meta-grid">
+    <div class="meta-box">
+      <span class="meta-label">Category</span>
+      <span class="meta-value">{html.escape(category)}</span>
+    </div>
+    <div class="meta-box">
+      <span class="meta-label">Keywords</span>
+      <div class="chip-row">{chips}</div>
+    </div>
+  </div>
+  <p class="section-heading">Summary</p>
+  <ol class="summary-list">{summary_items}</ol>
+  <p class="section-heading">Entities</p>
+  <table class="entity-table">
+    <thead>
+      <tr><th>Entity</th><th>Type</th></tr>
+    </thead>
+    <tbody>{entity_rows}</tbody>
+  </table>
+</div>
+""",
+        unsafe_allow_html=True,
     )
 
 
 def _render_translation(result: TranslatedStory) -> None:
     st.markdown(
-        '<p class="result-label">Translation</p>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        _directional_text(result.translated_title),
-        unsafe_allow_html=True,
-    )
-    st.markdown('<div class="result-rule"></div>', unsafe_allow_html=True)
-    st.markdown(
-        _directional_text(result.translated_content),
+        f"""
+<div class="result-card">
+  <p class="result-label">Translated story</p>
+  <h3 class="story-title auto-direction">{html.escape(result.translated_title)}</h3>
+  <p class="section-heading">Translated text</p>
+  {_directional_text(result.translated_content, "story-body auto-direction")}
+</div>
+""",
         unsafe_allow_html=True,
     )
 
 
 def render_validated_result(result: ValidatedTaskResponse) -> None:
-    st.markdown('<div class="result-rule"></div>', unsafe_allow_html=True)
     if isinstance(result, NewsDetails):
         _render_extraction(result)
     elif isinstance(result, TranslatedStory):
@@ -252,93 +285,242 @@ def _stream_with_status(
         yield chunk
 
 
+def _ensure_session_counters() -> None:
+    st.session_state.setdefault("inference_history", [])
+    st.session_state.setdefault("total_requests", 0)
+    st.session_state.setdefault("total_latency_ms", 0)
+    st.session_state.setdefault("total_input_tokens", 0)
+    st.session_state.setdefault("total_output_tokens", 0)
+
+
 def _render_previous_result(task: TaskName) -> None:
     previous = st.session_state.get(f"last_result_{task}")
     if not previous:
+        hint = (
+            "Paste Arabic text and click Extract Details."
+            if task == "extraction"
+            else "Paste text and click Translate."
+        )
         st.markdown(
-            '<div class="empty-proof">Your streamed model response will '
-            "appear here.</div>",
+            f'<div class="output-box empty-proof">{html.escape(hint)}</div>',
             unsafe_allow_html=True,
         )
         return
     raw = cast(str, previous.get("raw", ""))
     error = previous.get("error")
     validated = previous.get("validated")
+    preview = str(previous.get("preview", ""))
     if error:
         st.error(str(error))
     if validated is not None:
         render_validated_result(cast(ValidatedTaskResponse, validated))
-    if raw:
-        with st.expander("Raw model response"):
-            st.code(raw, language="json", wrap_lines=True)
+    if raw or validated is not None:
+        _render_history_output(
+            raw,
+            task=task,
+            preview=preview,
+            validated=cast(ValidatedTaskResponse | None, validated),
+            expanded=True,
+            index=1,
+        )
+
+
+def _story_preview(story: str) -> str:
+    preview = story.strip().replace("\n", " ")
+    if len(preview) > 80:
+        return preview[:80] + "…"
+    return preview
+
+
+def _json_text(
+    raw: str,
+    validated: ValidatedTaskResponse | None = None,
+) -> str:
+    if validated is not None:
+        return json.dumps(validated.model_dump(), ensure_ascii=False, indent=2)
+    return _pretty_json(raw)
+
+
+def _render_structured_json(
+    raw: str,
+    validated: ValidatedTaskResponse | None = None,
+) -> None:
+    st.code(_json_text(raw, validated), language="json", wrap_lines=True)
+
+
+def _render_history_output(
+    raw: str,
+    *,
+    task: str,
+    preview: str,
+    validated: ValidatedTaskResponse | None = None,
+    error: str | None = None,
+    expanded: bool = False,
+    index: int | None = None,
+) -> None:
+    label = f"{task} · {preview}" if preview else task
+    if index is not None:
+        label = f"{index} · {label}"
+    with st.expander(label, expanded=expanded):
+        if error:
+            st.error(str(error))
+        _render_structured_json(raw, validated)
 
 
 def _store_task_result(
     task: TaskName,
     *,
+    story: str,
     raw: str,
     validated: ValidatedTaskResponse | None,
     error: str | None,
+    latency_ms: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> None:
+    _ensure_session_counters()
+    preview = _story_preview(story)
     st.session_state[f"last_result_{task}"] = {
         "raw": raw,
         "validated": validated,
         "error": error,
+        "preview": preview,
     }
+    st.session_state["total_requests"] = (
+        int(st.session_state["total_requests"]) + 1
+    )
+    st.session_state["total_latency_ms"] = (
+        int(st.session_state["total_latency_ms"]) + latency_ms
+    )
+    st.session_state["total_input_tokens"] = (
+        int(st.session_state["total_input_tokens"]) + input_tokens
+    )
+    st.session_state["total_output_tokens"] = (
+        int(st.session_state["total_output_tokens"]) + output_tokens
+    )
+    st.session_state["inference_history"].append(
+        {
+            "task": task,
+            "preview": preview,
+            "raw": _json_text(raw, validated),
+            "error": error,
+            "latency_ms": latency_ms,
+        }
+    )
 
 
 def _render_generation_failure(
     task: TaskName,
+    story: str,
     raw: str,
     exc: Exception,
     status: Any,
     settings: InferenceSettings,
+    *,
+    latency_ms: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> None:
     LOGGER.exception("Streaming inference failed")
     message = _runtime_error_message(exc, settings)
     status.update(label="Generation failed", state="error")
     st.error(message)
     if raw:
-        with st.expander("Partial model response", expanded=True):
-            st.code(raw, language="json", wrap_lines=True)
-    _store_task_result(task, raw=raw, validated=None, error=message)
+        _render_history_output(
+            raw,
+            task=task,
+            preview=_story_preview(story),
+            expanded=True,
+            index=1,
+        )
+    _store_task_result(
+        task,
+        story=story,
+        raw=raw,
+        validated=None,
+        error=message,
+        latency_ms=latency_ms,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
 
 
 def _validate_render_and_store(
     controller: NewsStreamingController,
     task: TaskName,
+    story: str,
     raw: str,
+    *,
+    latency_ms: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> None:
     try:
         validated = controller.validate_task_response(task, raw)
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         message = _validation_error_message(exc)
         st.warning(message)
-        with st.expander("Raw model response", expanded=True):
-            st.code(raw, language="json", wrap_lines=True)
-        _store_task_result(task, raw=raw, validated=None, error=message)
+        _render_history_output(
+            raw,
+            task=task,
+            preview=_story_preview(story),
+            expanded=True,
+            index=1,
+        )
+        _store_task_result(
+            task,
+            story=story,
+            raw=raw,
+            validated=None,
+            error=message,
+            latency_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
         return
 
     render_validated_result(validated)
-    with st.expander("Raw model response"):
-        st.code(raw, language="json", wrap_lines=True)
-    _store_task_result(task, raw=raw, validated=validated, error=None)
+    _render_history_output(
+        raw,
+        task=task,
+        preview=_story_preview(story),
+        validated=validated,
+        expanded=True,
+        index=1,
+    )
+    _store_task_result(
+        task,
+        story=story,
+        raw=raw,
+        validated=validated,
+        error=None,
+        latency_ms=latency_ms,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
 
 
-def _render_story_controls(task: TaskName) -> tuple[str, Any]:
-    pasted = st.text_area(
+def _render_story_controls(task: TaskName) -> str:
+    sample_col, clear_col = st.columns(2)
+    if sample_col.button("📄 Sample", key=f"{task}_load_sample"):
+        st.session_state[f"{task}_story"] = SAMPLE_STORY
+    if clear_col.button("🗑️ Clear", key=f"{task}_clear"):
+        st.session_state[f"{task}_story"] = ""
+    return st.text_area(
         "Story",
         height=260,
         placeholder="Paste the news story…",
         key=f"{task}_story",
+        label_visibility="collapsed",
     )
-    uploaded = st.file_uploader(
-        "Or upload a story",
-        type=["txt", "md"],
-        key=f"{task}_upload",
-        help="UTF-8 TXT or Markdown. Pasted text takes precedence.",
-    )
-    return pasted, uploaded
+
+
+def _usage_from(story: str, raw: str, started: float) -> dict[str, int]:
+    return {
+        "latency_ms": int((time.perf_counter() - started) * 1000),
+        "input_tokens": _estimate_tokens(story),
+        "output_tokens": _estimate_tokens(raw),
+    }
 
 
 def _run_streaming_task(
@@ -348,37 +530,72 @@ def _run_streaming_task(
     *,
     source_language: str,
     target_language: str,
+    stream_output: bool,
 ) -> None:
     status = st.status("Preparing inference…", expanded=False)
     chunks: list[str] = []
+    started = time.perf_counter()
+    live_box = st.empty()
     try:
         controller = get_controller(settings)
         status.update(label="Waiting for the first token…", state="running")
-        with st.chat_message("assistant"):
-            streamed = st.write_stream(
-                _stream_with_status(
-                    controller,
-                    task,
-                    story,
-                    source_language=source_language,
-                    target_language=target_language,
-                    status=status,
-                    chunks=chunks,
+        iterator = _stream_with_status(
+            controller,
+            task,
+            story,
+            source_language=source_language,
+            target_language=target_language,
+            status=status,
+            chunks=chunks,
+        )
+        if stream_output:
+            with live_box.container():
+                st.markdown(
+                    '<p class="live-label">Live output</p>',
+                    unsafe_allow_html=True,
                 )
-            )
-        raw = streamed if isinstance(streamed, str) else "".join(chunks)
+                streamed = st.write_stream(iterator)
+            raw = streamed if isinstance(streamed, str) else "".join(chunks)
+        else:
+            raw = "".join(iterator)
         status.update(label="Generation complete", state="complete")
     except Exception as exc:
         raw = "".join(chunks)
-        _render_generation_failure(task, raw, exc, status, settings)
+        live_box.empty()
+        _render_generation_failure(
+            task,
+            story,
+            raw,
+            exc,
+            status,
+            settings,
+            **_usage_from(story, raw, started),
+        )
+        st.rerun()
         return
 
-    _validate_render_and_store(controller, task, raw)
+    live_box.empty()
+    _validate_render_and_store(
+        controller,
+        task,
+        story,
+        raw,
+        **_usage_from(story, raw, started),
+    )
+    st.rerun()
 
 
-def _render_task_tab(task: TaskName, settings: InferenceSettings) -> None:
-    input_column, output_column = st.columns([0.95, 1.05], gap="large")
+def _render_task_tab(
+    task: TaskName,
+    settings: InferenceSettings,
+    *,
+    stream_output: bool,
+) -> None:
+    input_column, output_column = st.columns([1, 1], gap="large")
     with input_column:
+        st.markdown(
+            "### Arabic Input" if task == "extraction" else "### Translation"
+        )
         source_language, target_language = "Arabic", "English"
         if task == "translation":
             language_columns = st.columns(2)
@@ -393,34 +610,24 @@ def _render_task_tab(task: TaskName, settings: InferenceSettings) -> None:
                 index=1,
                 key="translation_target_language",
             )
-        pasted, uploaded = _render_story_controls(task)
+        pasted = _render_story_controls(task)
         submitted = st.button(
-            (
-                "Extract information"
-                if task == "extraction"
-                else "Translate story"
-            ),
+            "🔍 Extract Details" if task == "extraction" else "🌍 Translate",
             key=f"{task}_submit",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
 
     with output_column:
-        st.markdown("### Live output")
-        st.markdown(
-            f'<p class="proof-identity">{html.escape(_runtime_identity(settings))}</p>',
-            unsafe_allow_html=True,
-        )
+        st.markdown("### Model Output")
         if not submitted:
             _render_previous_result(task)
             return
         try:
             story = resolve_story_input(
                 pasted,
-                uploaded_name=uploaded.name if uploaded is not None else None,
-                uploaded_bytes=(
-                    uploaded.getvalue() if uploaded is not None else None
-                ),
+                uploaded_name=None,
+                uploaded_bytes=None,
             )
         except ValueError as exc:
             st.error(str(exc))
@@ -431,134 +638,175 @@ def _render_task_tab(task: TaskName, settings: InferenceSettings) -> None:
             story,
             source_language=source_language,
             target_language=target_language,
+            stream_output=stream_output,
+        )
+
+
+def _render_history_tab() -> None:
+    _ensure_session_counters()
+    history = list(st.session_state.get("inference_history", []))
+    if not history:
+        st.info("No inferences yet — run a task first.")
+        return
+    for index, item in enumerate(reversed(history), start=1):
+        _render_history_output(
+            str(item.get("raw", "")),
+            task=str(item.get("task", "task")),
+            preview=str(item.get("preview", "")),
+            error=str(item["error"]) if item.get("error") else None,
+            expanded=False,
+            index=index,
         )
 
 
 def _probe_vllm_connection(settings: InferenceSettings) -> None:
     error: BaseException | None = None
+    detail = ""
     try:
-        controller = get_controller(settings)
-        check_vllm_connection(controller.runtime.client, settings.model_id)
+        runtime = VLLMModel.load(
+            base_url=settings.base_url,
+            api_key=settings.api_key,
+            model_id=settings.model_id,
+            timeout=8.0,
+        )
+        served = list_served_model_ids(runtime.client)
+        detail = ", ".join(served) if served else "reachable"
     except Exception as exc:
         error = exc
         LOGGER.exception("vLLM connection check failed")
-        st.error(
-            _without_secret(
-                (
-                    f"Unable to verify {settings.model_id} at "
-                    f"{settings.base_url}."
-                ),
-                settings.api_key,
-            )
-        )
+        detail = _without_secret(str(exc), settings.api_key)
     st.session_state["vllm_connection"] = {
-        "key": (settings.base_url.strip(), settings.model_id.strip()),
+        "key": settings.base_url.strip(),
         "status": connection_state_from_check(error),
+        "detail": detail,
     }
 
 
-def _render_sidebar(defaults: InferenceSettings) -> InferenceSettings:
+def _render_sidebar(defaults: InferenceSettings) -> tuple[InferenceSettings, bool]:
+    _ensure_session_counters()
     with st.sidebar:
-        st.markdown("**ArabLLM Inference Studio**")
-        backend_label = st.selectbox(
-            "Backend",
-            BACKEND_OPTIONS,
-            index=BACKEND_OPTIONS.index(
-                "vLLM" if defaults.provider == "vllm" else "Direct fine-tuned model"
-            ),
-            key="inference_backend",
-        )
-        provider = BACKEND_BY_LABEL[backend_label]
-        if provider == "finetuned":
-            st.caption("Direct fine-tuned model")
-            st.caption("Adapter")
-            st.caption(_adapter_source())
-            st.caption("Base model")
-            st.caption(QWEN_MODEL_ID)
-            return InferenceSettings.direct()
-
-        base_url, model_id, env_api_key, temperature, max_tokens = (
-            _vllm_environment_defaults(defaults)
-        )
+        st.markdown("## AkhbarLLM")
+        st.divider()
+        st.markdown("### Connection")
         base_url = st.text_input(
-            "API base URL",
-            value=base_url,
+            "Base URL",
+            value=defaults.base_url,
             key="vllm_base_url",
-        )
-        model_id = st.text_input(
-            "Model ID",
-            value=model_id,
-            key="vllm_model_id",
-        )
-        api_key_override = st.text_input(
-            "API key override",
-            value="",
-            type="password",
-            key="vllm_api_key_override",
-            help="Leave blank to use VLLM_API_KEY from the environment.",
-        )
-        temperature = st.slider(
-            "Temperature",
-            min_value=0.0,
-            max_value=1.0,
-            value=float(temperature),
-            step=0.01,
-            key="vllm_temperature",
-        )
-        max_tokens = st.slider(
-            "Maximum output tokens",
-            min_value=1,
-            max_value=4096,
-            value=int(max_tokens),
-            step=1,
-            key="vllm_max_tokens",
         )
         try:
             settings = InferenceSettings(
                 provider="vllm",
                 base_url=base_url,
-                api_key=api_key_override.strip() or env_api_key,
-                model_id=model_id,
-                temperature=temperature,
-                max_tokens=max_tokens,
+                api_key=defaults.api_key,
+                model_id=defaults.model_id or VLLM_MODEL_ID,
+                temperature=defaults.temperature,
+                max_tokens=defaults.max_tokens,
             )
         except ValueError as exc:
             st.error(str(exc))
             settings = InferenceSettings(
                 provider="vllm",
                 base_url=base_url.strip() or VLLM_API_BASE_URL,
-                api_key=api_key_override.strip() or env_api_key,
-                model_id=model_id.strip() or VLLM_MODEL_ID,
-                temperature=min(max(float(temperature), 0.0), 1.0),
-                max_tokens=min(max(int(max_tokens), 1), 4096),
+                api_key=defaults.api_key,
+                model_id=defaults.model_id or VLLM_MODEL_ID,
+                temperature=defaults.temperature,
+                max_tokens=defaults.max_tokens,
             )
-
-        if st.button("Check connection", key="vllm_check_connection"):
+        if st.button("🔌 Check connection", key="vllm_check_connection"):
             _probe_vllm_connection(settings)
-
-        state = _connection_state_for(settings.base_url, settings.model_id)
-        st.caption(
-            f"vLLM · {connection_status_label(state)}"
+            st.rerun()
+        preview_url = str(
+            st.session_state.get("vllm_base_url") or defaults.base_url
         )
-        return settings
+        st.markdown(
+            _status_badge_html(_connection_state_for(preview_url)),
+            unsafe_allow_html=True,
+        )
+        stored = st.session_state.get("vllm_connection")
+        if isinstance(stored, dict) and stored.get("key") == preview_url.strip():
+            detail = str(stored.get("detail") or "").strip()
+            if detail:
+                st.caption(detail)
+
+        st.markdown("### Configuration")
+        temperature = st.slider(
+            "Temperature",
+            min_value=0.0,
+            max_value=1.0,
+            value=float(defaults.temperature),
+            step=0.05,
+            key="vllm_temperature",
+        )
+        slider_max = 1536
+        stored_tokens = int(st.session_state.get("vllm_max_tokens") or 0)
+        if stored_tokens > slider_max:
+            st.session_state["vllm_max_tokens"] = slider_max
+        snapped_tokens = 64 * max(
+            1,
+            min(slider_max // 64, round(int(defaults.max_tokens) / 64)),
+        )
+        max_tokens = st.slider(
+            "Max tokens",
+            min_value=64,
+            max_value=slider_max,
+            value=min(snapped_tokens, slider_max),
+            step=64,
+            key="vllm_max_tokens",
+            help="Kept below the model's 2048-token context window.",
+        )
+        stream_output = st.toggle(
+            "Stream output",
+            value=True,
+            key="vllm_stream_output",
+        )
+        settings = InferenceSettings(
+            provider="vllm",
+            base_url=settings.base_url,
+            api_key=settings.api_key,
+            model_id=settings.model_id,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        st.divider()
+        st.markdown("### Stats")
+        requests = int(st.session_state["total_requests"])
+        latency = int(st.session_state["total_latency_ms"])
+        avg_latency = int(latency / requests) if requests else 0
+        st.metric("Requests", requests)
+        st.metric("Avg latency", f"{avg_latency} ms")
+        st.metric("Input tokens", int(st.session_state["total_input_tokens"]))
+        st.metric("Output tokens", int(st.session_state["total_output_tokens"]))
+        return settings, stream_output
 
 
 def main() -> None:
     st.set_page_config(
-        page_title="ArabLLM Inference Studio",
+        page_title="AkhbarLLM",
+        page_icon="A",
         layout="wide",
         initial_sidebar_state="expanded",
     )
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
-    settings = _render_sidebar(load_default_settings())
-    st.title("ArabLLM Inference Studio")
+    settings, stream_output = _render_sidebar(load_vllm_defaults())
+    st.title("AkhbarLLM")
     st.markdown(
-        '<p class="deck">Extract structured news details or translate a story. '
-        "Output streams from the selected backend as the model generates it.</p>",
+        '<p class="deck">Extract structure from Arabic news, then translate it.</p>',
         unsafe_allow_html=True,
     )
-    extraction_tab, translation_tab = st.tabs(["Extraction", "Translation"])
+    extraction_tab, translation_tab, history_tab = st.tabs(
+        ["Details Extraction", "Translation", "History"]
+    )
     with extraction_tab:
-        _render_task_tab("extraction", settings)
+        _render_task_tab(
+            "extraction",
+            settings,
+            stream_output=stream_output,
+        )
     with translation_tab:
-        _render_task_tab("translation", settings)
+        _render_task_tab(
+            "translation",
+            settings,
+            stream_output=stream_output,
+        )
+    with history_tab:
+        _render_history_tab()

@@ -34,7 +34,6 @@ _ACTIVE_ENVIRONMENT: Any | None = None
 
 
 def init_command_line_parser(parser: Any) -> None:
-    """Register the options used by this load test with Locust."""
     parser.add_argument(
         "--results-jsonl",
         type=Path,
@@ -60,7 +59,6 @@ def _is_local_runner(environment: Any) -> bool:
 
 @events.test_start.add_listener
 def test_start(environment: Any) -> None:
-    """Start a fresh JSONL file for one local Locust run."""
     global RESULTS_PATH, SERVED_MODEL, _ACTIVE_ENVIRONMENT
 
     if not _is_local_runner(environment):
@@ -82,7 +80,6 @@ def test_start(environment: Any) -> None:
 
 
 def generate_arabic_prompt() -> str:
-    """Generate random Arabic text between 150 and 200 characters."""
     return fake.text(
         max_nb_chars=random.randint(
             VLLM_LOAD_TEST_MIN_PROMPT_CHARS,
@@ -102,12 +99,10 @@ def build_payload(prompt: str, model_id: str) -> dict[str, Any]:
 
 
 def extract_completion(payload: Any) -> str:
-    """Return ``choices[0].text`` from a ``/v1/completions`` body."""
     return payload["choices"][0]["text"]
 
 
 def append_record(path: Path, record: Mapping[str, Any]) -> None:
-    """Append one UTF-8 JSON object without interleaving concurrent writers."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(record, ensure_ascii=False) + "\n"
@@ -117,7 +112,6 @@ def append_record(path: Path, record: Mapping[str, Any]) -> None:
 
 
 def send_completion(client: Any, prompt: str, model_id: str) -> bool:
-    """POST ``/v1/completions`` and save ``prompt`` / ``response`` on success."""
     request = client.post(
         "/v1/completions",
         json=build_payload(prompt, model_id),
@@ -258,7 +252,6 @@ def render_html_report(
 
 
 def write_html_report(environment: Any) -> Path:
-    """Write a browser-openable HTML report from the current Locust stats."""
     runner = getattr(environment, "runner", None)
     stats = getattr(runner, "stats", None)
     path = html_report_path(environment)
@@ -302,7 +295,6 @@ def persist_html_report(**kwargs: Any) -> None:
 
 
 class CompletionLoadTest(HttpUser):
-    """Concurrent users posting Arabic prompts to ``/v1/completions``."""
 
     wait_time = between(1, 3)
 
