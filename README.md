@@ -36,35 +36,22 @@ The target workflow combines structured extraction with English and French trans
 
 ---
 
-## Architecture
+## Documented smoke test: base Qwen vs AkhbarLLM
 
-Two distinct phases:
+Both models received the same story (`data/examples/story.txt`) and the same task prompts. This is a qualitative smoke test, not an aggregate benchmark. JSON parsing and Pydantic schema validation are deterministic checks; language quality, entity grounding, and translation completeness below are observations from this example.
 
-**Training** — `o4-mini` labels raw Arabic news. Those labels are formatted into SFT pairs and used to fine-tune Qwen2.5-1.5B with LoRA via LLaMA-Factory on **Kaggle T4 × 2**. Runs are tracked on Weights & Biases and the adapter is pushed to Hugging Face.
+Reports: [`qwen-base-evaluation.txt`](outputs/Evaluation/qwen-base-evaluation.txt) · [`qwen-finetuned-evaluation.txt`](outputs/Evaluation/qwen-finetuned-evaluation.txt)
 
-**Inference** — Arabic text goes through a prompt builder, is sent to a vLLM server in WSL with the LoRA adapter hot-loaded, then validated against a Pydantic schema and returned as structured JSON.
-
-<p align="center">
-  <img src="docs/assets/training-pipeline.png" width="100%" alt="Training pipeline"/>
-</p>
-
-<p align="center">
-  <img src="docs/assets/inference-pipeline.png" width="100%" alt="Inference pipeline"/>
-</p>
-
----
-
-## Base Qwen vs AkhbarLLM
-
-Same story (`data/examples/story.txt`), same prompts. Reports: `outputs/Evaluation/qwen-base-evaluation.txt` and `outputs/Evaluation/qwen-finetuned-evaluation.txt`.
-
-| | Base Qwen 1.5B | AkhbarLLM |
+| Check | Base Qwen 1.5B | AkhbarLLM |
 | --- | --- | --- |
-| Extraction language | English | **Arabic** |
-| JSON parse | Fail (```json fence) | **Pass** |
-| Schema (`NewsDetails` / `TranslatedStory`) | Fail | **Pass** |
-| Entities | Invented enum names | Story-grounded (فوربس, شاين إنيت) |
-| Translation | One sentence | Full article |
+| Extraction language | English | Arabic |
+| JSON parse | Fails because of a Markdown fence | Passes |
+| Pydantic schema | Fails | Passes |
+| Entities in this story | Includes enum-like placeholders | Uses story-specific entities |
+| Translation in this story | One sentence | Full article |
+
+<details>
+<summary><strong>Extraction outputs</strong></summary>
 
 **Base — extraction (invalid JSON)**
 
@@ -95,6 +82,11 @@ Same story (`data/examples/story.txt`), same prompts. Reports: `outputs/Evaluati
 }
 ```
 
+</details>
+
+<details>
+<summary><strong>Translation outputs</strong></summary>
+
 **Base — translation (invalid JSON)**
 
 Markdown fence, one sentence, the rest of the article is dropped. **JSON valid: False. Schema valid: False.**
@@ -116,6 +108,38 @@ No fence, full article, schema-valid. **JSON valid: True. Schema valid: True.**
   "translated_content": "Forbes magazine reported that family plays a central role in shaping individuals' relationship with money, as this connection is influenced by inherited financial behaviors across generations.\n\nThe report, based on research by Professor Shane Everette on financial well-being, explains that each person has a 'financial personality' determined by their interaction with money, which is directly affected by family upbringing and childhood experiences.\n\nThe three dimensions of the financial relationship according to the study include:\n\nAcquisition (A): Individuals belonging to this dimension tend to view money as an object that can be accumulated, seeing wealth accumulation as a goal in itself. The negative aspect of this pattern is the potential for it to turn into an obsession with wealth or vice versa, leading to complete rejection of money as a source of corruption.\n\nUsage (U): These individuals see money as an instrument for enjoying life, linking its value to the ability to provide enjoyment and comfort. Some may become compulsive spenders, while others gravitate towards extreme frugality fearing the future.\n\nManagement (M): Those with this mindset consider money a responsibility that requires careful planning. However, in some cases, it may lead to an obsessive focus on managing spending, negatively impacting personal relationships.\n\nHow does family influence our relationship with money? The report indicates that family experiences play a crucial role in determining the financial personality of each individual, for example, if one parent relies on money as a reward for good behavior, the child may later adopt the same pattern in adulthood.\n\nTo analyze these impacts accurately, the Financial Therapy Association developed a tool called the Money Genome Map (Genogram), used to identify financial patterns within families.\n\nThis tool includes:\n\nDrawing a family tree.\nClassifying family members according to the three dimensions of the financial relationship (A, U, M).\nDetermining whether the financial behavior of each individual is healthy (+) or unhealthy (-). For instance, if someone grew up in a family where they were accustomed to excessive spending, they may have a strong tendency to follow the same pattern, or vice versa, becoming excessively tight-fisted as a psychological reaction."
 }
 ```
+
+</details>
+
+---
+
+## Architecture
+
+The system has two explicit phases. During **training**, `o4-mini` labels Arabic news, the records are converted into schema-guided SFT pairs, and LLaMA-Factory trains a LoRA adapter while the base Qwen model remains frozen. During **inference**, the application builds the task prompt, streams generation from the LoRA-enabled model, and validates the resulting JSON with Pydantic before rendering it.
+
+### Training
+
+<p align="center">
+  <img src="docs/assets/training-pipeline.png" width="100%" alt="AkhbarLLM training pipeline"/>
+</p>
+
+### Inference
+
+<p align="center">
+  <img src="docs/assets/inference-pipeline.png" width="100%" alt="AkhbarLLM inference pipeline"/>
+</p>
+
+## Engineering decisions
+
+| Decision | Why it is used |
+| --- | --- |
+| Teacher distillation | Pay for labeling during dataset creation and reuse the structured supervision locally |
+| LoRA | Adapt a 1.5B model without full-parameter fine-tuning |
+| JSON Schema in prompts | Give every provider the exact target contract |
+| Pydantic validation | Detect malformed or schema-incompatible model output deterministically |
+| Provider factory | Compare local and hosted runtimes through one application interface |
+| vLLM OpenAI-compatible API | Support standard clients, LoRA hot-loading, and streaming inference |
+| CJK token suppression | Prevent unwanted Chinese vocabulary from appearing in Arabic output |
 
 ---
 
