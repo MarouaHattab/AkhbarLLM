@@ -4,7 +4,7 @@
 
 Complete pipeline: labeled data from OpenAI `o4-mini`, LoRA fine-tuning via LLaMA-Factory on **Kaggle T4 × 2**, production serving with vLLM in WSL, and a Streamlit UI with token streaming.
 
-Adapter: [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) · Training: [Weights & Biases](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3) · Demo: [Streamlit + vLLM walkthrough](https://drive.google.com/file/d/1xSs2JlxuCeDHPiIetVMTGWxGXMmmIk_i/view?usp=sharing)
+Adapter: [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) · Training: [Weights & Biases](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3) · Demo: [Streamlit](https://drive.google.com/file/d/1xSs2JlxuCeDHPiIetVMTGWxGXMmmIk_i/view?usp=sharing)
 
 ---
 
