@@ -1,8 +1,6 @@
 # AkhbarLLM
 
-An end-to-end Arabic news NLP system that distills structured labels from a teacher model, fine-tunes Qwen2.5-1.5B with LoRA, and serves schema-validated streaming inference locally with vLLM.
-
-The project covers teacher-label data generation, SFT preparation, LoRA training on 2× NVIDIA T4 GPUs, evaluation, local vLLM serving, and a Streamlit UI.
+AkhbarLLM is an end-to-end Arabic news NLP system spanning teacher-label data generation, SFT preparation, and Qwen2.5-1.5B LoRA fine-tuning on 2× NVIDIA T4 GPUs. It includes evaluation, local vLLM serving with post-generation schema validation, and a Streamlit UI for token streaming.
 
 **Model adapter** → [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) · **Training runs** → [Weights & Biases](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3) · **Video demo** → [Google Drive](https://drive.google.com/file/d/1xSs2JlxuCeDHPiIetVMTGWxGXMmmIk_i/view?usp=sharing)
 
@@ -12,7 +10,7 @@ The project covers teacher-label data generation, SFT preparation, LoRA training
 
 ## Why this matters
 
-Arabic news workflows require structured extraction plus English and French translation. Large API models can produce the required labels, but repeated third-party inference introduces ongoing cost and service dependency. AkhbarLLM distills that workflow into a small LoRA adapter served locally, with no third-party model API charge at inference.
+The target workflow combines structured extraction with English and French translation. Large API models can produce the required labels, but repeated third-party inference introduces ongoing cost and service dependency. AkhbarLLM distills that workflow into a small LoRA adapter served locally, with no third-party model API charge at inference.
 
 ## Project at a glance
 
@@ -23,18 +21,18 @@ Arabic news workflows require structured extraction plus English and French tran
 | Model | Qwen2.5-1.5B-Instruct + LoRA rank 64 across all linear layers |
 | Training | 2× NVIDIA T4 on Kaggle, 3 epochs, effective batch size 8 |
 | Serving | vLLM OpenAI-compatible API in WSL + Streamlit token streaming |
-| Validation | Pydantic and JSON Schema constraints for structured output validation |
+| Validation | JSON Schema prompts + Pydantic post-generation validation |
 
 ## What I built
 
-- Built the teacher-label and data pipeline with `o4-mini` and typed schemas.
-- Created reproducible SFT formatting and dataset registration.
-- Configured LoRA fine-tuning and experiment tracking.
-- Implemented constrained, schema-valid generation and evaluation workflows.
-- Integrated the local vLLM lifecycle, token streaming, and Streamlit UI.
-- Built the Locust load-test scenario, harness, and analysis workflow, without presenting published benchmark results.
+- Built the `o4-mini` teacher-label/data pipeline in `src/workflows/generate_distillation_dataset.py`, backed by model adapters and typed schemas in `src/models/`.
+- Implemented reproducible SFT formatting and dataset registration in `src/workflows/format_finetuning_dataset.py` and `src/workflows/register_llamafactory_datasets.py`.
+- Defined the LoRA training and W&B tracking configuration in `configs/llamafactory/news_finetune.yaml`.
+- Implemented schema-guided prompting in `src/tasks/`, parse/normalization and Pydantic validation in `src/controllers/streaming.py`, and evaluation in `src/controllers/evaluation.py`.
+- Integrated vLLM lifecycle scripts in `deployment/vllm/` with streaming in `src/controllers/streaming.py` and the Streamlit entry point in `app.py`.
+- Built the Locust harness in `tests/load/locustfile.py` and result analysis in `src/workflows/analyze_vllm_load.py`.
 
-`LlamaFactor/` is an upstream LLaMA-Factory checkout used by the project. Project-specific code lives under `src/`, `configs/`, `deployment/`, and `tests/`.
+`LlamaFactor/` is an upstream LLaMA-Factory checkout used by the project. Project-specific implementation lives in `app.py` and under `src/`, `configs/`, `deployment/`, and `tests/`.
 
 ---
 
