@@ -438,7 +438,7 @@ news-finetuning/
 
 **LLM fine-tuning** — LoRA (PEFT), SFT data generation, LLaMA-Factory, knowledge distillation, Weights & Biases, Hugging Face Hub
 
-**Production serving** — vLLM, LoRA adapter hot-loading, OpenAI-compatible API, streaming inference, CJK logits suppression
+**Local serving** — vLLM, LoRA adapter hot-loading, OpenAI-compatible API, streaming inference, CJK logits suppression
 
 **NLP** — Arabic news, structured extraction, named entities, translation, schema-injected prompts
 
