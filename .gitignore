@@ -20,4 +20,3 @@ outputs/models/news-finetune/*
 !outputs/models/news-finetune/.gitkeep
 outputs/LoadTesting/*
 !outputs/LoadTesting/.gitkeep
-docs
