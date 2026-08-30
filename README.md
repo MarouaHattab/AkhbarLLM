@@ -1,28 +1,44 @@
 # AkhbarLLM
 
-**Fine-tuning a 1.5B model to match teacher-quality Arabic news NLP — self-hosted, zero per-request cost.**
+An end-to-end Arabic news NLP system that distills structured labels from a teacher model, fine-tunes Qwen2.5-1.5B with LoRA, and serves schema-validated streaming inference locally with vLLM.
 
-Complete pipeline: labeled data from OpenAI `o4-mini`, LoRA fine-tuning via LLaMA-Factory on **Kaggle T4 × 2**, production serving with vLLM in WSL, and a Streamlit UI with token streaming.
+The project covers teacher-label data generation, SFT preparation, LoRA training on 2× NVIDIA T4 GPUs, evaluation, local vLLM serving, and a Streamlit UI.
 
-Adapter: [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) · Training: [Weights & Biases](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3) · Demo: [Streamlit](https://drive.google.com/file/d/1xSs2JlxuCeDHPiIetVMTGWxGXMmmIk_i/view?usp=sharing)
+**Model adapter** → [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) · **Training runs** → [Weights & Biases](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3) · **Video demo** → [Google Drive](https://drive.google.com/file/d/1xSs2JlxuCeDHPiIetVMTGWxGXMmmIk_i/view?usp=sharing)
 
----
+<p align="center">
+  <img src="docs/assets/project-overview.png" width="100%" alt="AkhbarLLM project overview"/>
+</p>
 
-## The Problem
+## Why this matters
 
-Arabic news NLP needs structured output from unstructured text: titles, keywords, summaries, named entities, categories, and translations. A teacher model does this well, but it costs money at scale and cannot be self-hosted.
+Arabic news workflows require structured extraction plus English and French translation. Large API models can produce the required labels, but repeated third-party inference introduces ongoing cost and service dependency. AkhbarLLM distills that workflow into a small LoRA adapter served locally, with no third-party model API charge at inference.
 
-Base `Qwen/Qwen2.5-1.5B-Instruct` is free to run, but it is **bad at Arabic** on this task. It answers in English, wraps JSON in markdown fences, and invents entities (`Person`, `Location`, `Disease`) that are not in the story.
+## Project at a glance
 
-**The approach:** use `o4-mini` once to generate high-quality labeled JSON, then LoRA-fine-tune Qwen 1.5B on that data on **Kaggle (2× NVIDIA T4)**. The result is a self-hosted adapter that emits the same schema-valid JSON on this task, at zero per-request cost.
+| Area | Implementation |
+| --- | --- |
+| Tasks | Arabic news extraction + English/French translation |
+| Data | 2,400 source stories; 2,766 SFT examples; 2,700 train / 66 validation |
+| Model | Qwen2.5-1.5B-Instruct + LoRA rank 64 across all linear layers |
+| Training | 2× NVIDIA T4 on Kaggle, 3 epochs, effective batch size 8 |
+| Serving | vLLM OpenAI-compatible API in WSL + Streamlit token streaming |
+| Validation | Pydantic and JSON Schema constraints for structured output validation |
+
+## What I built
+
+- Built the teacher-label and data pipeline with `o4-mini` and typed schemas.
+- Created reproducible SFT formatting and dataset registration.
+- Configured LoRA fine-tuning and experiment tracking.
+- Implemented constrained, schema-valid generation and evaluation workflows.
+- Integrated the local vLLM lifecycle, token streaming, and Streamlit UI.
+- Built the Locust load-test scenario, harness, and analysis workflow, without presenting published benchmark results.
+
+`LlamaFactor/` is an upstream LLaMA-Factory checkout used by the project. Project-specific code lives under `src/`, `configs/`, `deployment/`, and `tests/`.
 
 ---
 
 ## Architecture
-
-<p align="center">
-  <img src="docs/assets/project-overview.png" width="100%" alt="AkhbarLLM overview"/>
-</p>
 
 Two distinct phases:
 
