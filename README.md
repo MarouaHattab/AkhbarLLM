@@ -1,70 +1,72 @@
 # AkhbarLLM
 
-![AkhbarLLM overview](docs/assets/project-overview.png)
+**Fine-tuning a 1.5B model to match teacher-quality Arabic news NLP — self-hosted, zero per-request cost.**
 
-**AkhbarLLM** is a local Arabic news model. It takes an Arabic story and returns **raw, schema-valid JSON** for:
+Complete pipeline: labeled data from OpenAI `o4-mini`, LoRA fine-tuning via LLaMA-Factory on **Kaggle T4 × 2**, production serving with vLLM in WSL, and a Streamlit UI with token streaming.
 
-1. **Extraction** — Arabic title, keywords, summary, category, named entities (`NewsDetails`)
-2. **Translation** — title + full body (`TranslatedStory`)
-
-It is a **LoRA adapter (rank 64)** on [`Qwen/Qwen2.5-1.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct). It was **trained on Kaggle with 2× NVIDIA T4 (T4 × 2)**. Training is tracked in [Weights & Biases](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3). The adapter is on Hugging Face: [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news).
-
-Serve with **vLLM in WSL**. Use **Streamlit on Windows**. Load-test with **Locust**.
-
-| | |
-| --- | --- |
-| Adapter | [huggingface.co/marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) |
-| Training logs | [W&B · llamafactory · T4 × 2](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3) |
-| Hardware | Kaggle **GPU T4 × 2** |
+Adapter: [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) · Training: [Weights & Biases](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3) · Demo: [Streamlit + vLLM walkthrough](https://drive.google.com/file/d/1xSs2JlxuCeDHPiIetVMTGWxGXMmmIk_i/view?usp=sharing)
 
 ---
 
-## Why fine-tune
+## The Problem
 
-Base Qwen 1.5B is a general chat model. On Arabic news it is **bad at Arabic** and **bad at JSON**:
+Arabic news NLP needs structured output from unstructured text: titles, keywords, summaries, named entities, categories, and translations. A teacher model does this well, but it costs money at scale and cannot be self-hosted.
 
-- Titles and keywords come out in **English**, not Arabic.
-- Output is wrapped in `` ```json `` fences, so parsing fails.
-- Entity lists dump schema enum names (`Person`, `Location`, `Disease`) as if they appeared in the story.
-- Translation is a short English sentence, not the full article.
-- Chinese tokens from Qwen’s vocab can leak into the output.
+Base `Qwen/Qwen2.5-1.5B-Instruct` is free to run, but it is **bad at Arabic** on this task. It answers in English, wraps JSON in markdown fences, and invents entities (`Person`, `Location`, `Disease`) that are not in the story.
 
-AkhbarLLM distills teacher JSON from OpenAI `o4-mini`, then LoRA-tunes Qwen on **Kaggle T4 × 2** so the student emits Arabic JSON that validates.
+**The approach:** use `o4-mini` once to generate high-quality labeled JSON, then LoRA-fine-tune Qwen 1.5B on that data on **Kaggle (2× NVIDIA T4)**. The result is a self-hosted adapter that emits the same schema-valid JSON on this task, at zero per-request cost.
 
-Same story for both evals: `data/examples/story.txt` (فوربس / شاين إنيت / العلاقة بالمال). Reports: `outputs/Evaluation/qwen-base-evaluation.txt` and `outputs/Evaluation/qwen-finetuned-evaluation.txt`.
+---
 
-| Check | Base Qwen 1.5B | AkhbarLLM (fine-tuned) |
+## Architecture
+
+<p align="center">
+  <img src="docs/assets/project-overview.png" width="100%" alt="AkhbarLLM overview"/>
+</p>
+
+Two distinct phases:
+
+**Training** — `o4-mini` labels raw Arabic news. Those labels are formatted into SFT pairs and used to fine-tune Qwen2.5-1.5B with LoRA via LLaMA-Factory on **Kaggle T4 × 2**. Runs are tracked on Weights & Biases and the adapter is pushed to Hugging Face.
+
+**Inference** — Arabic text goes through a prompt builder, is sent to a vLLM server in WSL with the LoRA adapter hot-loaded, then validated against a Pydantic schema and returned as structured JSON.
+
+<p align="center">
+  <img src="docs/assets/training-pipeline.png" width="100%" alt="Training pipeline"/>
+</p>
+
+<p align="center">
+  <img src="docs/assets/inference-pipeline.png" width="100%" alt="Inference pipeline"/>
+</p>
+
+---
+
+## Base Qwen vs AkhbarLLM
+
+Same story (`data/examples/story.txt`), same prompts. Reports: `outputs/Evaluation/qwen-base-evaluation.txt` and `outputs/Evaluation/qwen-finetuned-evaluation.txt`.
+
+| | Base Qwen 1.5B | AkhbarLLM |
 | --- | --- | --- |
 | Extraction language | English | **Arabic** |
-| Extraction JSON | Fail (markdown fence) | **Pass** |
-| Extraction schema | Fail | **Pass** |
-| Translation JSON | Fail (markdown fence) | **Pass** |
-| Translation schema | Fail | **Pass** |
-| Translation length | One sentence | Full article |
+| JSON parse | Fail (```json fence) | **Pass** |
+| Schema (`NewsDetails` / `TranslatedStory`) | Fail | **Pass** |
+| Entities | Invented enum names | Story-grounded (فوربس, شاين إنيت) |
+| Translation | One sentence | Full article |
 
-### Base Qwen — extraction (broken)
-
-English title, English keywords, invented entities, markdown fence. **JSON valid: False. Schema valid: False.**
+**Base — extraction (invalid JSON)**
 
 ```json
 {
   "story_title": "Family Influence on Financial Relationships",
   "story_keywords": ["Forbes", "Financial Therapy Association", "Money Genogram"],
-  "story_category": "economy",
   "story_entities": [
-    { "entity_value": "Forbes", "entity_type": "organization" },
-    { "entity_value": "A", "entity_type": "not_specified" },
     { "entity_value": "Person", "entity_type": "person-male" },
     { "entity_value": "Location", "entity_type": "location" },
-    { "entity_value": "Disease", "entity_type": "disease" },
-    { "entity_value": "Not Specified", "entity_type": "not_specified" }
+    { "entity_value": "Disease", "entity_type": "disease" }
   ]
 }
 ```
 
-### AkhbarLLM — extraction (valid)
-
-Arabic title and keywords, entities from the story. **JSON valid: True. Schema valid: True.**
+**AkhbarLLM — extraction (valid JSON)**
 
 ```json
 {
@@ -74,245 +76,369 @@ Arabic title and keywords, entities from the story. **JSON valid: True. Schema v
   "story_entities": [
     { "entity_value": "فوربس", "entity_type": "organization" },
     { "entity_value": "شاين إنيت", "entity_type": "person-male" },
-    { "entity_value": "رابطة العلاج المالي", "entity_type": "organization" },
-    { "entity_value": "Money Genogram", "entity_type": "artifact" }
+    { "entity_value": "رابطة العلاج المالي", "entity_type": "organization" }
   ]
 }
 ```
 
-### Base Qwen — translation (broken)
-
-One English sentence inside a markdown fence. **JSON valid: False.**
-
-```json
-{
-  "translated_title": "Forbes Magazine Reveals Family Plays a Central Role in Forming Individuals' Financial Relationships",
-  "translated_content": "According to Forbes magazine, family plays a central role in shaping individuals' financial relationships, as these relationships are influenced by inherited behavioral patterns across generations."
-}
-```
-
-### AkhbarLLM — translation (valid)
-
-Full article, no fence. **JSON valid: True. Schema valid: True.**
-
-```json
-{
-  "translated_title": "The Role of Family in Financial Relationships",
-  "translated_content": "Forbes magazine reported that family plays a central role in shaping individuals' relationship with money… The Financial Therapy Association developed a tool called the Money Genome Map (Genogram)…"
-}
-```
-
-Trainer val loss on Kaggle T4 × 2 (effective batch 8): **0.3619** at step 1000. Best val loss **0.346** at step 600.
-
 ---
 
-## Architecture
+## Fine-tuning pipeline
 
-Redraw: `python docs/assets/render_architecture.py`
-
-### Training (Kaggle T4 × 2)
-
-![Training pipeline](docs/assets/training-pipeline.png)
-
-Raw Arabic news → teacher `o4-mini` labels → SFT JSONL → LLaMA-Factory `train.json` / `val.json` → **LoRA SFT on Kaggle T4 × 2** → rank-64 adapter. W&B logs the run. Hugging Face hosts [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news). The 1.5B base stays frozen.
-
-### Inference
-
-![Inference pipeline](docs/assets/inference-pipeline.png)
-
-Streamlit (Windows) or Locust talks to **vLLM in WSL** (`Qwen2.5-1.5B` + LoRA `news-lora` + CJK suppressor) at `http://localhost:8000/v1`. Extraction and translation JSON are checked with Pydantic.
-
----
-
-## Setup
-
-Python **3.12**. Use [uv](https://docs.astral.sh/uv/).
+Copy `src/.env.example` to `src/.env` and set `HF_TOKEN`, `WANDB_API_KEY`, `OPENAI_API_KEY`.
 
 ```powershell
-copy src\.env.example src\.env
+uv sync --group distillation --group train --group evaluation
 ```
 
-```env
-HF_TOKEN=hf_...
-WANDB_API_KEY=...
-OPENAI_API_KEY=...
-GEMINI_API_KEY=...
-NEWS_MODEL_PROVIDER=vllm
-FINETUNED_ADAPTER_SOURCE=marouaHattab/ArabLLM-news
-VLLM_API_BASE_URL=http://localhost:8000/v1
-VLLM_API_KEY=local-vllm
-VLLM_MODEL_ID=news-lora
-```
+### 1. Generate labeled data with o4-mini
 
-```powershell
-uv sync --group app --group evaluation --group serve --group train --group distillation
-```
+Raw Arabic news (`data/raw/news-sample.jsonl`) goes in. The teacher returns structured JSON following the Pydantic schema.
 
----
-
-## All scripts
-
-Run every workflow with `python -m …` from the repo root.
-
-| Script | Command |
-| --- | --- |
-| Distill labels (`o4-mini` → `data/datasets/sft.jsonl`) | `uv run --group distillation python -m src.workflows.generate_distillation_dataset` |
-| Format SFT → LLaMA-Factory JSON | `uv run --group train python -m src.workflows.format_finetuning_dataset` |
-| Register datasets in LLaMA-Factory | `uv run --group train python -m src.workflows.register_llamafactory_datasets --llamafactory-dir LlamaFactor` |
-| Prepare train (HF + W&B login, copy YAML) | `uv run --group train python -m src.workflows.prepare_finetuning --llamafactory-dir LlamaFactor` |
-| Train on Kaggle **T4 × 2** | `cd LlamaFactor` then `llamafactory-cli train examples/train_lora/news_finetune.yaml` |
-| Eval base Qwen | `uv run --group evaluation python -m src.workflows.evaluate_models --model qwen --task both --output outputs/Evaluation/qwen-base-evaluation.txt` |
-| Eval AkhbarLLM | `uv run --group evaluation python -m src.workflows.evaluate_models --model finetuned --task both --output outputs/Evaluation/qwen-finetuned-evaluation.txt` |
-| Eval Gemini / OpenAI / all | `--model gemini` / `--model openai` / `--model all` |
-| Latency benchmark | `uv run --group evaluation python -m src.workflows.benchmark_models --model both --samples 30` |
-| Start vLLM (Windows → WSL) | `.\deployment\vllm\serve.ps1` |
-| Start vLLM (inside WSL) | `bash deployment/vllm/serve.sh` |
-| Stop vLLM | `.\deployment\vllm\stop.ps1` or `bash deployment/vllm/stop.sh` |
-| Wait until `news-lora` is up | `uv run --group serve python -m src.workflows.check_vllm --wait` |
-| Eval through vLLM | `uv run --group serve python -m src.workflows.infer_vllm --task both` |
-| Streamlit UI | `uv run --group app streamlit run app.py` |
-| Locust load test | `uv run --group serve locust -f tests/load/locustfile.py --headless --host=http://localhost:8000 -u 20 -r 1 -t 60s --html=outputs/LoadTesting/locust-results.html` |
-| Locust token summary | `uv run --group serve python -m src.workflows.analyze_vllm_load` |
-
-Config file for training: `configs/llamafactory/news_finetune.yaml`.
-
----
-
-## Format data
-
-```powershell
-uv run --group train python -m src.workflows.format_finetuning_dataset
-```
-
-Reads `data/datasets/sft.jsonl`. Each line:
-
-```json
-{
-  "story": "…Arabic article…",
-  "task": "Extract the story details into a JSON object according to the provided schema.",
-  "output_schema": { },
-  "response": { "story_title": "…", "story_keywords": ["…"] }
-}
-```
-
-Writes:
-
-| File | Size |
-| --- | --- |
-| `data/datasets/llama_factory/train.json` | 2700 rows |
-| `data/datasets/llama_factory/val.json` | 66 rows |
-| `data/datasets/llama_factory/dataset_info.json` | column map |
-
-`instruction` = `# Story` + `# Task` + `# Output Schema` + `# Output JSON:`. `output` = teacher JSON. Rebuild labels (paid API):
-
-```powershell
+```python
 uv run --group distillation python -m src.workflows.generate_distillation_dataset
 ```
 
----
+Output per record (`data/datasets/sft.jsonl`):
 
-## Train on Kaggle (T4 × 2)
+```json
+{
+  "id": 1,
+  "story": "ذكرت مجلة فوربس أن العائلة تلعب دورا محوريا...",
+  "task": "Extract the story details into a JSON object according to the provided schema.",
+  "output_schema": { },
+  "response": {
+    "story_title": "دور العائلة في تشكيل علاقة الأفراد بالمال",
+    "story_keywords": ["العائلة", "العلاقة بالمال", "فوربس"],
+    "story_summary": ["العائلة تؤثر على علاقة الأفراد بالمال"],
+    "story_category": "economy",
+    "story_entities": [
+      { "entity_value": "فوربس", "entity_type": "organization" }
+    ]
+  },
+  "teacher_model": "o4-mini"
+}
+```
 
-Training **must** use two T4 GPUs (Kaggle accelerator **GPU T4 × 2**). That is how the published adapter was trained.
+### 2. Format for LLaMA-Factory
 
-| Setting | Value |
-| --- | --- |
-| Base | `Qwen/Qwen2.5-1.5B-Instruct` |
-| Method | LoRA SFT, rank **64**, all linear layers |
-| Hardware | **Kaggle T4 × 2**, DDP |
-| Batch | 1 per GPU × 4 accum × 2 GPUs = **8** |
-| Epochs / LR | 3 / `1e-4` cosine, warmup 0.1 |
-| Precision | FP16 + gradient checkpointing |
-| Context | `cutoff_len: 3500` |
-| W&B | `report_to: wandb`, run `newsx-qwen2.5-1.5b-lora` |
-| Hub | `push_to_hub: true` → [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) |
+```python
+uv run --group train python -m src.workflows.format_finetuning_dataset
+```
 
-```powershell
+Produces `data/datasets/llama_factory/train.json` (2700) and `val.json` (66) in LLaMA-Factory SFT format (`system`, `instruction`, `output`).
+
+### 3. Register the dataset and copy the YAML
+
+```python
 uv run --group train python -m src.workflows.prepare_finetuning --llamafactory-dir LlamaFactor
 ```
 
-On Kaggle (GPU T4 × 2, internet on):
+That logs into Hugging Face and W&B, then writes `LlamaFactor/data/dataset_info.json`:
+
+```json
+{
+  "news_finetune_train": {
+    "file_name": "/path/to/data/datasets/llama_factory/train.json",
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output",
+      "system": "system",
+      "history": "history"
+    }
+  },
+  "news_finetune_val": {
+    "file_name": "/path/to/data/datasets/llama_factory/val.json",
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output",
+      "system": "system",
+      "history": "history"
+    }
+  }
+}
+```
+
+Register only:
+
+```python
+uv run --group train python -m src.workflows.register_llamafactory_datasets --llamafactory-dir LlamaFactor
+```
+
+### 4. Train with LoRA on Kaggle T4 × 2
 
 ```bash
 cd LlamaFactor
 llamafactory-cli train examples/train_lora/news_finetune.yaml
 ```
 
-Watch [W&B](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3). Adapter files: `outputs/models/news-finetune/` (`adapter_config.json`, `adapter_model.safetensors`).
+```yaml
+model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+finetuning_type: lora
+lora_rank: 64
+lora_target: all
+dataset: news_finetune_train
+eval_dataset: news_finetune_val
+num_train_epochs: 3
+learning_rate: 1.0e-4
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4
+fp16: true
+report_to: wandb
+run_name: newsx-qwen2.5-1.5b-lora
+```
+
+Config source: `configs/llamafactory/news_finetune.yaml`. Training used **Kaggle GPU T4 × 2** (DDP, effective batch 8). Tracked on W&B: [llamafactory](https://wandb.ai/marouahattab3-cole-polytechnique/llamafactory?nw=nwusermarouahattab3). Adapter on Hugging Face: [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news).
 
 ---
 
 ## Evaluate
 
-```powershell
+```python
 uv run --group evaluation python -m src.workflows.evaluate_models --model qwen --task both --output outputs/Evaluation/qwen-base-evaluation.txt
 uv run --group evaluation python -m src.workflows.evaluate_models --model finetuned --task both --output outputs/Evaluation/qwen-finetuned-evaluation.txt
+uv run --group evaluation python -m src.workflows.evaluate_models --model gemini --task both
+uv run --group evaluation python -m src.workflows.evaluate_models --model openai --task both
+uv run --group evaluation python -m src.workflows.evaluate_models --model all --task both
 ```
 
-`--task` is `extraction`, `translation`, or `both`. `--story` is any UTF-8 file. `--model` is `qwen`, `finetuned`, `gemini`, `openai`, or `all`.
+`--task` is `extraction`, `translation`, or `both`. `--story` points at any UTF-8 file.
+
+Latency / tokens (not schema checks):
+
+```python
+uv run --group evaluation python -m src.workflows.benchmark_models --model both --samples 30
+```
+
+Through the live vLLM server:
+
+```python
+uv run --group serve python -m src.workflows.infer_vllm --task both
+```
 
 ---
 
-## Serve vLLM on WSL (Windows)
+## Serving with vLLM
 
-vLLM 0.7.2 is Linux-only. WSL2 + Ubuntu + NVIDIA Windows driver (`nvidia-smi` inside Ubuntu). `uv` inside WSL. Adapter in `outputs/models/news-finetune/` or download [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news).
+vLLM 0.7.2 is Linux-only. On Windows, run it **inside WSL2** (NVIDIA driver with WSL GPU; `nvidia-smi` must work in Ubuntu). Adapter path: `outputs/models/news-finetune/`.
+
+### Start server
+
+From PowerShell:
 
 ```powershell
 .\deployment\vllm\serve.ps1
 ```
 
+Inside WSL:
+
 ```bash
 bash deployment/vllm/serve.sh
 ```
 
-Binds `0.0.0.0:8000`, model id **`news-lora`**, CJK suppressor on. Linux venv: `~/.cache/news-finetuning/venv`.
+Equivalent process (what the script starts):
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --model Qwen/Qwen2.5-1.5B-Instruct \
+  --dtype half \
+  --gpu-memory-utilization 0.90 \
+  --max-model-len 2048 \
+  --max-num-seqs 1 \
+  --enforce-eager \
+  --enable-lora \
+  --max-lora-rank 64 \
+  --lora-modules "news-lora=outputs/models/news-finetune" \
+  --middleware src.serving.middleware.enforce_chinese_suppression \
+  --logits-processor-pattern '^src\.models\.vllm_logits_processors\.ChineseTokenSuppressor$'
+```
+
+> T4 / sm_75: FlashAttention2 wants sm_80+, so the server uses `--enforce-eager`. Middleware always attaches a CJK token suppressor so Chinese vocab IDs are not sampled on Arabic news.
+
+Wait until `news-lora` is listed:
+
+```python
+uv run --group serve python -m src.workflows.check_vllm --wait
+```
+
+Stop:
 
 ```powershell
-uv run --group serve python -m src.workflows.check_vllm --wait
 .\deployment\vllm\stop.ps1
 ```
 
----
+```bash
+bash deployment/vllm/stop.sh
+```
 
-## Streamlit
+### Call the API
 
-```powershell
-# src/.env → NEWS_MODEL_PROVIDER=vllm
+```python
+import requests
+
+response = requests.post("http://localhost:8000/v1/completions", json={
+    "model": "news-lora",
+    "prompt": prompt,
+    "max_tokens": 512,
+    "temperature": 0.3,
+})
+```
+
+Chat completions (what Streamlit uses) hit `http://localhost:8000/v1/chat/completions`.
+
+### Run the UI
+
+```python
 uv run --group app streamlit run app.py
 ```
 
-Direct GPU load (no vLLM): `NEWS_MODEL_PROVIDER=finetuned` and `FINETUNED_ADAPTER_SOURCE=outputs/models/news-finetune`.
+Set `NEWS_MODEL_PROVIDER=vllm` in `src/.env`. Direct PEFT load (no vLLM): `NEWS_MODEL_PROVIDER=finetuned`.
+
+Walkthrough of the live UI and vLLM serving: [demo.mp4](https://drive.google.com/file/d/1xSs2JlxuCeDHPiIetVMTGWxGXMmmIk_i/view?usp=sharing).
 
 ---
 
-## Locust
+## Load testing
 
-vLLM must already be running.
+20 concurrent users, 60 seconds, Arabic fake text (`Faker ar_SA`) per request. vLLM must already be running.
 
-```powershell
-New-Item -ItemType Directory -Force -Path outputs\LoadTesting | Out-Null
-uv run --group serve locust -f tests/load/locustfile.py --headless --host=http://localhost:8000 -u 20 -r 1 -t 60s --html=outputs/LoadTesting/locust-results.html
+```bash
+uv run --group serve locust -f tests/load/locustfile.py \
+  --headless \
+  --host=http://localhost:8000 \
+  -u 20 -r 1 -t 60s \
+  --html=outputs/LoadTesting/locust-results.html
+```
+
+Token analysis after the test:
+
+```python
 uv run --group serve python -m src.workflows.analyze_vllm_load
 ```
 
-Open `outputs/LoadTesting/locust-results.html` in Chrome or Edge. Interactive UI: same locust command without `--headless`, then `http://localhost:8089`.
+Writes `outputs/LoadTesting/token-summary.txt` and `token-summary.json` (`records`, `total_input_tokens`, `total_output_tokens`). Successful prompt/response pairs are in `outputs/LoadTesting/vllm-tokens.jsonl`. Open the HTML report in Chrome or Edge.
 
 ---
 
-## Layout
+## Output schemas
+
+**Details extraction** (`NewsDetails`)
+
+```json
+{
+  "story_title": "string (5–100 chars)",
+  "story_keywords": ["string"],
+  "story_summary": ["string (1–5 points)"],
+  "story_category": "politics | sports | art | technology | economy | health | entertainment | science | not_specified",
+  "story_entities": [
+    {
+      "entity_value": "string",
+      "entity_type": "person-male | person-female | location | organization | event | time | quantity | money | product | law | disease | artifact | not_specified"
+    }
+  ]
+}
+```
+
+**Translation** (`TranslatedStory`)
+
+```json
+{
+  "translated_title": "string",
+  "translated_content": "string"
+}
+```
+
+---
+
+## Project structure
 
 ```
-app.py                                 Streamlit
-configs/llamafactory/news_finetune.yaml
-data/raw/news-sample.jsonl             2400 unlabeled stories
-data/datasets/sft.jsonl                teacher SFT (2766)
-data/datasets/llama_factory/           train.json / val.json
-data/examples/story.txt                eval story
-deployment/vllm/                       serve.ps1, serve.sh, stop.*
-docs/assets/                           overview + pipeline diagrams
-outputs/Evaluation/                    base vs fine-tuned reports
-outputs/models/news-finetune/          local LoRA
-src/workflows/                         all python -m scripts
-tests/load/locustfile.py
-LlamaFactor/                           LLaMA-Factory used on Kaggle
+news-finetuning/
+├── app.py                                 # Streamlit entry
+├── configs/llamafactory/
+│   └── news_finetune.yaml                 # LoRA SFT config (Kaggle T4 × 2)
+├── data/
+│   ├── raw/news-sample.jsonl              # unlabeled Arabic news
+│   ├── datasets/sft.jsonl                 # teacher SFT records
+│   ├── datasets/llama_factory/            # train.json, val.json
+│   └── examples/story.txt                 # eval story
+├── deployment/vllm/
+│   ├── serve.ps1 / serve.sh               # start vLLM in WSL
+│   └── stop.ps1 / stop.sh
+├── docs/assets/                           # architecture diagrams
+├── outputs/
+│   ├── Evaluation/                        # base vs fine-tuned reports
+│   ├── LoadTesting/                       # Locust HTML + token summary
+│   └── models/news-finetune/              # local LoRA adapter
+├── src/
+│   ├── workflows/
+│   │   ├── generate_distillation_dataset.py
+│   │   ├── format_finetuning_dataset.py
+│   │   ├── register_llamafactory_datasets.py
+│   │   ├── prepare_finetuning.py
+│   │   ├── evaluate_models.py
+│   │   ├── benchmark_models.py
+│   │   ├── check_vllm.py
+│   │   ├── infer_vllm.py
+│   │   └── analyze_vllm_load.py
+│   ├── models/                            # Qwen, LoRA, vLLM, Gemini, OpenAI
+│   ├── tasks/                             # extraction + translation prompts
+│   ├── templates/
+│   ├── serving/middleware.py              # CJK suppressor
+│   └── ui/streamlit_app.py
+├── tests/load/locustfile.py
+└── LlamaFactor/                           # LLaMA-Factory checkout
 ```
+
+---
+
+## Skills
+
+**LLM fine-tuning** — LoRA (PEFT), SFT data generation, LLaMA-Factory, knowledge distillation, Weights & Biases, Hugging Face Hub
+
+**Production serving** — vLLM, LoRA adapter hot-loading, OpenAI-compatible API, streaming inference, CJK logits suppression
+
+**NLP** — Arabic news, structured extraction, named entities, translation, schema-injected prompts
+
+**Engineering** — Pydantic v2, factory pattern, JSONL pipelines, Locust load tests, Streamlit
+
+**Infrastructure** — CUDA on Kaggle T4 × 2, WSL2 GPU serving on Windows, uv / Python 3.12
+
+---
+
+## Stack
+
+| | |
+| --- | --- |
+| Base model | Qwen/Qwen2.5-1.5B-Instruct |
+| Fine-tuning | LLaMA-Factory · LoRA rank 64 · all linear layers |
+| Teacher | o4-mini |
+| Serving | vLLM 0.7.2 · WSL |
+| UI | Streamlit |
+| Tracking | Weights & Biases |
+| Hub | [marouaHattab/ArabLLM-news](https://huggingface.co/marouaHattab/ArabLLM-news) |
+| GPU (train) | Kaggle NVIDIA T4 × 2 |
+| Language | Python 3.12 |
+
+---
+
+## Numbers
+
+| Metric | Value |
+| --- | --- |
+| Raw stories | 2400 |
+| SFT samples | 2766 (2700 train / 66 val) |
+| LoRA rank | 64 |
+| Train GPUs | 2× T4 (Kaggle) |
+| Effective batch | 8 |
+| Epochs | 3 |
+| Learning rate | 1e-4 cosine |
+| Cutoff / serve context | 3500 / 2048 tokens |
+| Best val loss | 0.346 (step 600) |
+| Final val loss | 0.3619 (step 1000) |
+| Load test | 20 users · 60s |
+| Served model id | `news-lora` |
