@@ -81,6 +81,28 @@ Same story (`data/examples/story.txt`), same prompts. Reports: `outputs/Evaluati
 }
 ```
 
+**Base — translation (invalid JSON)**
+
+Markdown fence, one sentence, the rest of the article is dropped. **JSON valid: False. Schema valid: False.**
+
+```json
+{
+  "translated_title": "Forbes Magazine Reveals Family Plays a Central Role in Forming Individuals' Financial Relationships",
+  "translated_content": "According to Forbes magazine, family plays a central role in shaping individuals' financial relationships, as these relationships are influenced by inherited behavioral patterns across generations."
+}
+```
+
+**AkhbarLLM — translation (valid JSON)**
+
+No fence, full article, schema-valid. **JSON valid: True. Schema valid: True.**
+
+```json
+{
+  "translated_title": "The Role of Family in Financial Relationships",
+  "translated_content": "Forbes magazine reported that family plays a central role in shaping individuals' relationship with money, as this connection is influenced by inherited financial behaviors across generations.\n\nThe report, based on research by Professor Shane Everette on financial well-being, explains that each person has a 'financial personality' determined by their interaction with money, which is directly affected by family upbringing and childhood experiences.\n\nThe three dimensions of the financial relationship according to the study include:\n\nAcquisition (A): Individuals belonging to this dimension tend to view money as an object that can be accumulated, seeing wealth accumulation as a goal in itself. The negative aspect of this pattern is the potential for it to turn into an obsession with wealth or vice versa, leading to complete rejection of money as a source of corruption.\n\nUsage (U): These individuals see money as an instrument for enjoying life, linking its value to the ability to provide enjoyment and comfort. Some may become compulsive spenders, while others gravitate towards extreme frugality fearing the future.\n\nManagement (M): Those with this mindset consider money a responsibility that requires careful planning. However, in some cases, it may lead to an obsessive focus on managing spending, negatively impacting personal relationships.\n\nHow does family influence our relationship with money? The report indicates that family experiences play a crucial role in determining the financial personality of each individual, for example, if one parent relies on money as a reward for good behavior, the child may later adopt the same pattern in adulthood.\n\nTo analyze these impacts accurately, the Financial Therapy Association developed a tool called the Money Genome Map (Genogram), used to identify financial patterns within families.\n\nThis tool includes:\n\nDrawing a family tree.\nClassifying family members according to the three dimensions of the financial relationship (A, U, M).\nDetermining whether the financial behavior of each individual is healthy (+) or unhealthy (-). For instance, if someone grew up in a family where they were accustomed to excessive spending, they may have a strong tendency to follow the same pattern, or vice versa, becoming excessively tight-fisted as a psychological reaction."
+}
+```
+
 ---
 
 ## Fine-tuning pipeline
