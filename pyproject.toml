@@ -68,7 +68,6 @@ where = ["."]
 include = ["src*"]
 
 [tool.pytest.ini_options]
-# Avoid the Windows-locked `.pytest_cache/v` path from earlier runs.
 cache_dir = ".cache/pytest"
 testpaths = ["tests"]
 markers = [
